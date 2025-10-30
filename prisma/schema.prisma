@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Chat {
+  id        String            @id @default(cuid())
+  sessionId String            @unique
+  title     String            @default("New Chat")
+  isActive  Boolean           @default(true)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  knowledge KnowledgeOnChat[]
+  messages  Message[]
+
+  @@index([sessionId])
+  @@index([updatedAt])
+  @@index([isActive])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  chatId    String
+  role      String
+  content   String
+  modelUsed String?
+  sources   String?
+  imageUrl  String?
+  timestamp DateTime @default(now())
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([timestamp])
+}
+
+model Knowledge {
+  id               String            @id @default(cuid())
+  name             String
+  content          String            @default("")
+  originalFilename String            @default("")
+  filePath         String?
+  fileType         String            @default("txt")
+  fileSize         Int               @default(0)
+  documentCount    Int               @default(0)
+  hasImages        Boolean           @default(false)
+  imageCount       Int               @default(0)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  uploadedAt       DateTime          @default(now())
+  chats            KnowledgeOnChat[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model KnowledgeOnChat {
+  chatId      String
+  knowledgeId String
+  knowledge   Knowledge @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+  chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, knowledgeId])
+}

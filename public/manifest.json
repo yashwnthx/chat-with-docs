@@ -1,0 +1,30 @@
+{
+  "name": "Chat with Docs",
+  "short_name": "Chat Docs",
+  "description": "AI-powered document chat application with knowledge base management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0A7CFF",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
+      "sizes": "160x160",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "New",
+      "description": "Start a new conversation",
+      "url": "/?new=true",
+      "icons": []
+    }
+  ]
+}
+

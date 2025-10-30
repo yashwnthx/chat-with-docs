@@ -1,0 +1,77 @@
+import { PrismaClient } from '@prisma/client';
+import { NextResponse } from 'next/server';
+
+const prisma = new PrismaClient();
+
+// GET specific chat with messages
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const chat = await prisma.chat.findUnique({
+      where: { id },
+      include: {
+        messages: {
+          orderBy: { timestamp: 'asc' },
+        },
+        knowledge: {
+          include: {
+            knowledge: true,
+          },
+        },
+      },
+    });
+
+    if (!chat) {
+      return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
+    }
+
+    return NextResponse.json({ chat, messages: chat.messages });
+  } catch (error) {
+    console.error('Error fetching chat:', error);
+    return NextResponse.json({ error: 'Failed to fetch chat' }, { status: 500 });
+  }
+}
+
+// DELETE chat
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    // Soft delete by setting isActive to false
+    await prisma.chat.update({
+      where: { id },
+      data: { isActive: false } as any,
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting chat:', error);
+    return NextResponse.json({ error: 'Failed to delete chat' }, { status: 500 });
+  }
+}
+
+// PATCH update chat
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const { title } = await req.json();
+
+    const chat = await prisma.chat.update({
+      where: { id },
+      data: { title },
+    });
+
+    return NextResponse.json({ chat });
+  } catch (error) {
+    console.error('Error updating chat:', error);
+    return NextResponse.json({ error: 'Failed to update chat' }, { status: 500 });
+  }
+}
