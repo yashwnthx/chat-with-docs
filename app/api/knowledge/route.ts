@@ -87,7 +87,7 @@ export async function POST(req: Request) {
         console.log(`   - Pages: ${pdfData.numpages}`);
         console.log(`   - Characters extracted: ${content.length}`);
         console.log(`   - First 200 chars: ${content.substring(0, 200)}`);
-        
+
         // If extraction failed or resulted in empty text
         if (!content || content.trim().length < 50) {
           console.log('⚠️ PDF extraction resulted in minimal text');
