@@ -1,8 +1,5 @@
 import { PrismaClient } from '@prisma/client';
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
-import { join } from 'path';
-import { nanoid } from 'nanoid';
 
 const prisma = new PrismaClient();
 
@@ -67,19 +64,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'File too large. Maximum size is 10MB.' }, { status: 400 });
     }
 
-    // Save file to disk
+    // Read file content (no filesystem save - Vercel is read-only)
     const buffer = Buffer.from(await file.arrayBuffer());
-    const fileName = `${nanoid()}-${file.name}`;
-    const uploadDir = join(process.cwd(), 'public', 'uploads', 'knowledge');
-
-    try {
-      await mkdir(uploadDir, { recursive: true });
-    } catch (err) {
-      // Directory might already exist
-    }
-
-    const filePath = join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
 
     // Extract text content
     let content = '';
@@ -150,13 +136,13 @@ This file type may not contain extractable text. Please provide the content manu
     const wordCount = content.split(/\s+/).length;
     const documentCount = Math.max(1, Math.ceil(wordCount / 500));
 
-    // Save to database
+    // Save to database (no filePath since Vercel filesystem is read-only)
     const knowledge = await prisma.knowledge.create({
       data: {
         name: file.name,
         content: content.substring(0, 50000), // Limit content length
         originalFilename: file.name,
-        filePath: `/uploads/knowledge/${fileName}`,
+        filePath: null, // No file saved on Vercel
         fileType: file.type,
         fileSize: file.size,
         documentCount,
