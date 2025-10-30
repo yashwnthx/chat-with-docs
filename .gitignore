@@ -5,6 +5,7 @@
 
 # Testing
 /coverage
+supabase-schema.sql
 
 # Next.js
 /.next/
@@ -59,3 +60,4 @@ dev.db-journal
 
 # OS
 Thumbs.db
+.mise.toml
