@@ -296,17 +296,7 @@ NEVER format like this:
 
     console.log('Calling AI with', enhancedMessages.length, 'messages');
 
-    // Stream the response
-    const result = streamText({
-      model: aiModel,
-      messages: enhancedMessages,
-      temperature: 0.7,
-      maxTokens: 4096, // Increased from 2048 to allow longer responses
-    });
-
-    console.log('✅ Stream created successfully');
-
-    // Save chat and messages to database
+    // Save chat and messages to database BEFORE streaming
     const userMessage = userMessages[userMessages.length - 1];
 
     let chat: any;
@@ -345,7 +335,7 @@ NEVER format like this:
       },
     });
 
-    // Save assistant message (will be updated as it streams)
+    // Save assistant message placeholder
     const assistantMessage = await db.message.create({
       data: {
         chatId: chat.id,
@@ -362,28 +352,35 @@ NEVER format like this:
       data: { updatedAt: new Date() },
     });
 
-    // Save the full response in the background
-    // We need to consume the stream to get the full text
-    (async () => {
-      try {
-        const fullText = await result.text;
-        if (fullText && fullText.trim()) {
-          await db.message.update({
-            where: { id: assistantMessage.id },
-            data: {
-              content: fullText.trim(),
-              sources: knowledgeSourceNames.length > 0 ? JSON.stringify(knowledgeSourceNames) : null,
-            },
-          });
-          console.log('✅ Message saved to database:', fullText.length, 'chars');
-          if (knowledgeSourceNames.length > 0) {
-            console.log('📚 Sources:', knowledgeSourceNames.join(', '));
+    // Stream the response with onFinish to save complete text
+    const result = streamText({
+      model: aiModel,
+      messages: enhancedMessages,
+      temperature: 0.7,
+      maxTokens: 4096,
+      async onFinish({ text }) {
+        // Save the complete response after streaming finishes
+        try {
+          if (text && text.trim()) {
+            await db.message.update({
+              where: { id: assistantMessage.id },
+              data: {
+                content: text.trim(),
+                sources: knowledgeSourceNames.length > 0 ? JSON.stringify(knowledgeSourceNames) : null,
+              },
+            });
+            console.log('✅ Message saved to database:', text.length, 'chars');
+            if (knowledgeSourceNames.length > 0) {
+              console.log('📚 Sources:', knowledgeSourceNames.join(', '));
+            }
           }
+        } catch (err) {
+          console.error('❌ Error saving message:', err);
         }
-      } catch (err) {
-        console.error('❌ Error saving message:', err);
-      }
-    })();
+      },
+    });
+
+    console.log('✅ Stream created successfully');
 
     // Return the streaming response
     return result.toDataStreamResponse({
