@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { Message } from "@/types";
 import { useTheme } from "next-themes";
 import { FormattedMessage } from "./FormattedMessage";
-import { formatMessageTime, formatFullTimestamp } from "@/lib/date-utils";
 import { useToast } from "@/hooks/use-toast";
 
 interface MessageBubbleProps {
@@ -14,19 +13,20 @@ interface MessageBubbleProps {
   isLastUserMessage?: boolean;
   justSent?: boolean;
   isMobileView?: boolean;
+  isFirstMessage?: boolean; // Add prop to identify first message
 }
 
-export const MessageBubble = memo(function MessageBubble({ 
-  message, 
-  isTyping, 
-  isLastUserMessage, 
+export const MessageBubble = memo(function MessageBubble({
+  message,
+  isTyping,
+  isLastUserMessage,
   justSent,
-  isMobileView = false 
+  isMobileView = false,
+  isFirstMessage = false
 }: MessageBubbleProps) {
   const { theme, systemTheme } = useTheme();
   const effectiveTheme = theme === "system" ? systemTheme : theme;
   const isMe = message.sender === "me";
-  const [showFullTime, setShowFullTime] = useState(false);
   const [showCopied, setShowCopied] = useState(false);
   const { toast } = useToast();
 
@@ -77,7 +77,7 @@ export const MessageBubble = memo(function MessageBubble({
       <div className="flex">
         {/* Left spacer for blue messages */}
         {isMe && <div className="flex-1 bg-background" />}
-        
+
         {/* Message bubble container */}
         <div
           className={cn(
@@ -113,21 +113,16 @@ export const MessageBubble = memo(function MessageBubble({
                   )}
                 />
 
-                {/* Timestamp and Copy Button - Show on tap/hover */}
+                {/* Copy Button - Show on tap/hover */}
+                {/* Position below message if it's the first one to avoid header overlap */}
                 {!isTyping && (
-                  <div className="absolute -top-8 left-0 right-0 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity px-2">
-                    {message.timestamp && (
-                      <button
-                        onClick={() => setShowFullTime(!showFullTime)}
-                        className="text-[10px] text-muted-foreground px-2 py-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background"
-                        title="Click for full timestamp"
-                      >
-                        {showFullTime ? formatFullTimestamp(message.timestamp) : formatMessageTime(message.timestamp)}
-                      </button>
-                    )}
+                  <div className={cn(
+                    "absolute right-2 opacity-0 group-hover:opacity-100 transition-opacity z-50",
+                    isFirstMessage ? "top-full mt-1" : "-top-8"
+                  )}>
                     <button
                       onClick={handleCopyMessage}
-                      className="ml-auto text-[10px] text-muted-foreground px-2 py-0.5 rounded bg-background/80 backdrop-blur-sm hover:bg-background flex items-center gap-1 transition-colors"
+                      className="text-[10px] text-muted-foreground px-2 py-0.5 rounded bg-background/90 backdrop-blur-sm hover:bg-background flex items-center gap-1 transition-colors shadow-sm border border-border/50"
                       title="Copy message"
                     >
                       {showCopied ? (
@@ -179,14 +174,14 @@ export const MessageBubble = memo(function MessageBubble({
                   {isMe ? (
                     message.content
                   ) : (
-                    <FormattedMessage content={message.content} />
+                    <FormattedMessage content={message.content} sources={message.sources} />
                   )}
                 </div>
               </div>
             )}
           </div>
         </div>
-        
+
         {/* Right spacer for gray messages */}
         {!isMe && <div className="flex-1 bg-background" />}
       </div>
@@ -197,7 +192,7 @@ export const MessageBubble = memo(function MessageBubble({
           <span className={cn(justSent && "animate-scale-in")}>Delivered</span>
         </div>
       )}
-      
+
       {/* Spacer after messages */}
       <div className="h-1 bg-background" />
     </div>

@@ -10,8 +10,13 @@ export async function GET() {
       where: { isActive: true },
       orderBy: { updatedAt: 'desc' },
       include: {
-        _count: {
-          select: { messages: true },
+        messages: {
+          orderBy: { timestamp: 'asc' }, // All messages in order
+        },
+        knowledge: {
+          include: {
+            knowledge: true,
+          },
         },
       },
     });

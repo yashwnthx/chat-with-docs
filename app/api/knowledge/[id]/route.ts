@@ -88,10 +88,9 @@ export async function DELETE(
       }
     }
 
-    // Soft delete from database
-    await prisma.knowledge.update({
+    // Hard delete from database (cascades to KnowledgeOnChat automatically)
+    await prisma.knowledge.delete({
       where: { id },
-      data: { isActive: false },
     });
 
     return NextResponse.json({ success: true });

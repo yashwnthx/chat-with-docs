@@ -9,7 +9,7 @@ datasource db {
 
 model Chat {
   id        String            @id @default(cuid())
-  sessionId String            @unique
+  sessionId String
   title     String            @default("New Chat")
   isActive  Boolean           @default(true)
   createdAt DateTime          @default(now())
@@ -60,8 +60,8 @@ model Knowledge {
 model KnowledgeOnChat {
   chatId      String
   knowledgeId String
-  knowledge   Knowledge @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
   chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  knowledge   Knowledge @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
 
   @@id([chatId, knowledgeId])
 }

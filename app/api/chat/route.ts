@@ -33,18 +33,18 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
     console.log('Generating image with Gemini 2.5 Flash Image (nano banana):', imagePrompt);
 
     // Generate image using Gemini 2.5 Flash Image model
-    const model = genAI.getGenerativeModel({ 
+    const model = genAI.getGenerativeModel({
       model: 'gemini-2.5-flash-image-preview',
     });
-    
+
     // Generate image - gemini-2.5-flash-image-preview uses simple prompt format
     const result = await model.generateContent(imagePrompt);
-    
+
     const response = result.response;
-    
+
     // Check if there's an image in the response
     const imagePart = response.candidates?.[0]?.content?.parts?.find((part: any) => part.inlineData);
-    
+
     if (!imagePart?.inlineData?.data) {
       throw new Error('No image data returned from Gemini');
     }
@@ -53,7 +53,7 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
     const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
     const fileName = `${nanoid()}.png`;
     const uploadDir = join(process.cwd(), 'public', 'uploads', 'generated');
-    
+
     try {
       await mkdir(uploadDir, { recursive: true });
     } catch (err) {
@@ -125,15 +125,15 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
 
   } catch (error: any) {
     console.error('❌ Image generation error:', error);
-    
+
     // Check if it's a rate limit error
     const is429 = error?.message?.includes('429') || error?.message?.includes('quota') || error?.message?.includes('rate limit');
-    const errorMessage = is429 
-      ? '🚫 Rate limit reached for image generation. The free tier has daily limits. Please try again later or upgrade your API plan.' 
+    const errorMessage = is429
+      ? '🚫 Rate limit reached for image generation. The free tier has daily limits. Please try again later or upgrade your API plan.'
       : error?.message || 'Unknown error occurred';
-    
+
     const statusCode = is429 ? 429 : 500;
-    
+
     return new Response(
       JSON.stringify({
         error: 'Failed to generate image',
@@ -175,7 +175,7 @@ export async function POST(req: Request) {
 
     // Always use gemini-2.5-flash for all text and document queries
     const model = 'gemini-2.5-flash';
-    
+
     const hasKnowledge = knowledgeIds && knowledgeIds.length > 0;
     if (hasKnowledge) {
       console.log('📄 Document query, using: gemini-2.5-flash');
@@ -184,7 +184,33 @@ export async function POST(req: Request) {
     }
 
     // Get knowledge base context if knowledge IDs provided
-    let systemPrompt = 'You are a helpful AI assistant.';
+    let systemPrompt = `You are a friendly, casual AI chatting via text message. Keep your responses conversational and natural, like you're texting a friend.
+
+CRITICAL FORMATTING RULES - MUST FOLLOW:
+- NEVER use asterisks (*) or double asterisks (**) for formatting
+- NEVER use bullet points or numbered lists
+- NEVER use markdown syntax of any kind
+- NO bold, italic, or special formatting
+- Write in plain text only, like a regular text message
+- If listing things, just use natural paragraphs with line breaks between items
+- Be conversational and casual, like texting a friend
+- Use contractions and natural language
+
+Example of good response:
+"Hey! So here's what I found...
+
+First thing is this really cool point about whatever.
+
+Then there's also this other thing that's super important.
+
+And lastly, this final bit wraps it all up nicely!"
+
+NEVER format like this:
+"**Key Points:**
+* Point one
+* Point two"`;
+
+    let knowledgeSourceNames: string[] = [];
 
     if (knowledgeIds.length > 0) {
       console.log('Loading knowledge bases:', knowledgeIds);
@@ -194,22 +220,55 @@ export async function POST(req: Request) {
       console.log('Found knowledge bases:', knowledge.length);
 
       if (knowledge.length > 0) {
+        // Store source names for later
+        knowledgeSourceNames = knowledge.map(kb => kb.name);
+
         const knowledgeContext = knowledge
           .map(kb => {
             // Get full content or first 10000 characters for better context
             const content = (kb as any).content || '';
             console.log(`📄 Document "${kb.name}": ${content.length} chars`);
-            
+
             if (content.length < 100) {
               console.log(`⚠️  WARNING: Document has very little content (${content.length} chars)`);
               console.log(`   Content preview: "${content}"`);
             }
-            
+
             return `Document: ${kb.name}\n${content.substring(0, 10000)}${content.length > 10000 ? '...' : ''}`;
           })
           .join('\n\n---\n\n');
 
-        systemPrompt = `You are a helpful AI assistant. You have access to the following documents:\n\n${knowledgeContext}\n\nUse the information from these documents to answer the user's questions accurately. If the information is in the documents, cite them specifically. If the documents don't contain enough information or appear to be image-based/encrypted, let the user know.`;
+        systemPrompt = `You are a friendly, casual AI chatting via text message. Keep your responses conversational and natural, like you're texting a friend.
+
+You have access to these documents:
+
+${knowledgeContext}
+
+CRITICAL FORMATTING RULES - MUST FOLLOW:
+- NEVER use asterisks (*) or double asterisks (**) for formatting
+- NEVER use bullet points or numbered lists
+- NEVER use markdown syntax of any kind
+- NO bold, italic, or special formatting
+- Write in plain text only, like a regular text message
+- Answer questions using info from the documents naturally
+- If listing things, just use natural paragraphs with line breaks
+- Be conversational and casual, like texting a friend
+- NO citations or file names in your response
+- The system will show which documents were used separately
+
+Example of good response:
+"Hey! So from what I found, here's the deal...
+
+The main thing is this really important point that came up.
+
+Also worth noting is this other aspect that matters.
+
+And that pretty much covers it!"
+
+NEVER format like this:
+"**Key Points:**
+* Point one
+* Point two"`;
         console.log('📋 System prompt length:', systemPrompt.length, 'characters');
       }
     }
@@ -233,7 +292,7 @@ export async function POST(req: Request) {
       model: aiModel,
       messages: enhancedMessages,
       temperature: 0.7,
-      maxTokens: 2048,
+      maxTokens: 4096, // Increased from 2048 to allow longer responses
     });
 
     console.log('✅ Stream created successfully');
@@ -283,6 +342,7 @@ export async function POST(req: Request) {
         role: 'assistant',
         content: '',
         modelUsed: model,
+        sources: knowledgeSourceNames.length > 0 ? JSON.stringify(knowledgeSourceNames) : null,
       },
     });
 
@@ -300,9 +360,15 @@ export async function POST(req: Request) {
         if (fullText && fullText.trim()) {
           await prisma.message.update({
             where: { id: assistantMessage.id },
-            data: { content: fullText.trim() },
+            data: {
+              content: fullText.trim(),
+              sources: knowledgeSourceNames.length > 0 ? JSON.stringify(knowledgeSourceNames) : null,
+            },
           });
           console.log('✅ Message saved to database:', fullText.length, 'chars');
+          if (knowledgeSourceNames.length > 0) {
+            console.log('📚 Sources:', knowledgeSourceNames.join(', '));
+          }
         }
       } catch (err) {
         console.error('❌ Error saving message:', err);
@@ -313,6 +379,7 @@ export async function POST(req: Request) {
     return result.toDataStreamResponse({
       headers: {
         'X-Chat-Id': chat.id,
+        'X-Sources': knowledgeSourceNames.length > 0 ? JSON.stringify(knowledgeSourceNames) : '',
       },
     });
   } catch (error: any) {
@@ -322,12 +389,12 @@ export async function POST(req: Request) {
       stack: error?.stack,
       cause: error?.cause,
     });
-    
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         error: 'Failed to process chat request',
         details: error?.message || 'Unknown error',
-      }), 
+      }),
       {
         status: 500,
         headers: { 'Content-Type': 'application/json' },

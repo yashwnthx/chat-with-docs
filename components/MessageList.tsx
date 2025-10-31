@@ -17,18 +17,19 @@ export const MessageList = memo(function MessageList({ messages, isTyping, isMob
   return (
     <div className="flex-1 flex flex-col">
       {messages.map((msg, idx) => (
-        <MessageBubble 
-          key={msg.id} 
+        <MessageBubble
+          key={msg.id}
           message={msg}
           isLastUserMessage={idx === lastUserMessageIndex}
           justSent={idx === messages.length - 1 && msg.sender === 'me'}
           isMobileView={isMobileView}
+          isFirstMessage={idx === 0}
         />
       ))}
       {isTyping && (
-        <MessageBubble 
-          message={{ id: 'typing', content: '', sender: 'bot', timestamp: new Date().toISOString() }} 
-          isTyping 
+        <MessageBubble
+          message={{ id: 'typing', content: '', sender: 'bot', timestamp: new Date().toISOString() }}
+          isTyping
           isMobileView={isMobileView}
         />
       )}

@@ -32,13 +32,16 @@ export interface Message {
   type?: "text" | "image" | "system" | "silenced";
   imageUrl?: string; // For generated images
   mentions?: { id: string; name: string }[];
+  sources?: string; // JSON string or comma-separated list of sources
 }
 
 export interface KnowledgeBase {
   id: string;
   name: string;
-  content: string;
-  createdAt: string;
+  content?: string;
+  documentCount?: number;
+  uploadedAt?: string;
+  createdAt?: string;
 }
 
 export interface Conversation {

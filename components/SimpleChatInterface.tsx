@@ -1,20 +1,25 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { MessageInput } from './ChatInput';
 import { MessageList } from './MessageList';
 import { ChatHeader } from './ChatHeader';
 import { ScrollArea } from './ui/scroll-area';
-import { LoadingSpinner } from './LoadingSpinner';
 import { ConfirmDialog } from './ConfirmDialog';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { Message, Conversation, KnowledgeBase } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-export function SimpleChatInterface() {
+interface SimpleChatInterfaceProps {
+  chatId: string;
+}
+
+export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
+  const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(chatId);
   const [isTyping, setIsTyping] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const [messageDraft, setMessageDraft] = useState('');
@@ -31,15 +36,23 @@ export function SimpleChatInterface() {
   const [isMobile, setIsMobile] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingChat, setIsLoadingChat] = useState(false); // Start as false to prevent flash
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const hasLoadedInitialData = useRef(false); // Track if we've loaded data to prevent blinking
 
   const { toast } = useToast();
 
-  const STORAGE_KEY = 'chatbot_conversations';
-  const KB_STORAGE_KEY = 'chatbot_knowledge';
-
   // Get active conversation
   const activeConversation = conversations.find(c => c.id === activeConversationId);
+
+  // Memoize sorted conversations to prevent unnecessary re-renders
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      const timeA = new Date(a.lastMessageTime || 0).getTime();
+      const timeB = new Date(b.lastMessageTime || 0).getTime();
+      return timeB - timeA; // Most recent first
+    });
+  }, [conversations]);
 
   // Helper to get last message preview
   const getLastMessagePreview = (conv: Conversation): string => {
@@ -98,54 +111,80 @@ export function SimpleChatInterface() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showSearch]);
 
-  // Load from localStorage on mount
+  // Load sidebar chats and knowledge bases on initial mount - SILENT BACKGROUND LOADING
   useEffect(() => {
-    const savedConversations = localStorage.getItem(STORAGE_KEY);
-    const savedKnowledge = localStorage.getItem(KB_STORAGE_KEY);
-
-    if (savedConversations) {
+    // Load data silently in background without blocking UI
+    (async () => {
       try {
-        const parsed = JSON.parse(savedConversations);
-        setConversations(parsed);
-        if (parsed.length > 0) {
-          setActiveConversationId(parsed[0].id);
+        // Load all data in parallel
+        const [chatsResponse, kbResponse] = await Promise.all([
+          fetch('/api/chats'),
+          fetch('/api/knowledge'),
+        ]);
+
+        if (chatsResponse.ok) {
+          const { chats } = await chatsResponse.json();
+
+          // Convert ALL chats with ALL their messages
+          const allChats: Conversation[] = chats
+            .filter((chat: any) => chat.messages && chat.messages.length > 0)
+            .map((chat: any) => ({
+              id: chat.id,
+              name: chat.title || 'New Chat',
+              recipients: [{ id: 'ai', name: 'AI Assistant' }],
+              messages: chat.messages.map((msg: any) => ({
+                id: msg.id.toString(),
+                content: msg.content,
+                sender: msg.role === 'user' ? 'me' : 'bot',
+                timestamp: msg.timestamp,
+                sources: msg.sources,
+              })),
+              lastMessageTime: chat.updatedAt,
+              unreadCount: 0,
+            }));
+
+          // Update UI immediately when data arrives
+          setConversations(allChats);
+          hasLoadedInitialData.current = true; // Mark as loaded
+
+          // If current chat exists, load its knowledge
+          if (chatId) {
+            const currentChat = chats.find((c: any) => c.id === chatId);
+            if (currentChat?.knowledge && currentChat.knowledge.length > 0) {
+              const linkedKnowledgeIds = currentChat.knowledge.map((k: any) => k.knowledgeId);
+              setSelectedKnowledge(linkedKnowledgeIds);
+            }
+          }
         }
-      } catch (e) {
-        console.error('Error loading conversations:', e);
+
+        // Load knowledge bases
+        if (kbResponse.ok) {
+          const { knowledge } = await kbResponse.json();
+          const convertedKB: KnowledgeBase[] = knowledge.map((kb: any) => ({
+            id: kb.id,
+            name: kb.name,
+            documentCount: kb.documentCount || 1,
+            uploadedAt: kb.uploadedAt,
+          }));
+          setKnowledgeBases(convertedKB);
+        }
+      } catch (error) {
+        // Silent error - don't show toast on initial load
+        console.error('Error loading initial data:', error);
+        hasLoadedInitialData.current = true; // Mark as loaded even on error
       }
-    } else {
-      // Create initial conversation
-      const newConv: Conversation = {
-        id: uuidv4(),
-        name: 'New Chat',
-        recipients: [{ id: 'ai', name: 'AI Assistant' }],
-        messages: [],
-        lastMessageTime: new Date().toISOString(),
-        unreadCount: 0,
-      };
-      setConversations([newConv]);
-      setActiveConversationId(newConv.id);
-    }
+    })();
+  }, []); // Only run once on mount, no dependencies to avoid re-fetching
 
-    if (savedKnowledge) {
-      try {
-        setKnowledgeBases(JSON.parse(savedKnowledge));
-      } catch (e) {
-        console.error('Error loading knowledge bases:', e);
-      }
-    }
-  }, []);
-
-  // Save to localStorage whenever data changes
+  // No more lazy loading - just update active conversation when chatId changes
   useEffect(() => {
-    if (conversations.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-    }
-  }, [conversations]);
+    setActiveConversationId(chatId);
 
-  useEffect(() => {
-    localStorage.setItem(KB_STORAGE_KEY, JSON.stringify(knowledgeBases));
-  }, [knowledgeBases]);
+    // Reset knowledge selection for new chats
+    if (chatId && !conversations.find(c => c.id === chatId)) {
+      setSelectedKnowledge([]);
+    }
+  }, [chatId, conversations]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -210,29 +249,56 @@ export function SimpleChatInterface() {
     if (!text.trim() || !activeConversationId) return;
 
     const newMessage: Message = {
-      id: uuidv4(),
+      id: nanoid(),
       content: text,
       sender: 'me',
       timestamp: new Date().toISOString()
     };
 
-    // Update conversation with new message
-    setConversations(prev => prev.map(conv =>
-      conv.id === activeConversationId
-        ? {
-            ...conv,
-            messages: [...conv.messages, newMessage],
+    // Store the bot message ID to avoid creating duplicates
+    const botMessageId = nanoid();
+
+    // Optimistically update UI - create conversation if it doesn't exist
+    setConversations(prev => {
+      const existingConv = prev.find(c => c.id === activeConversationId);
+
+      if (existingConv) {
+        // Update existing conversation
+        return prev.map(conv =>
+          conv.id === activeConversationId
+            ? {
+                ...conv,
+                messages: [...conv.messages, newMessage],
+                lastMessageTime: new Date().toISOString(),
+              }
+            : conv
+        );
+      } else {
+        // Create new conversation for new chat
+        return [
+          {
+            id: activeConversationId,
+            name: 'New Chat',
+            recipients: [{ id: 'ai', name: 'AI Assistant' }],
+            messages: [newMessage],
             lastMessageTime: new Date().toISOString(),
-          }
-        : conv
-    ));
+            unreadCount: 0,
+          },
+          ...prev,
+        ];
+      }
+    });
 
     setMessageDraft('');
     setIsTyping(true);
 
-    // Prepare messages for API
+    // Get current conversation or create messages array for new chat
     const currentConv = conversations.find(c => c.id === activeConversationId);
-    const allMessages = currentConv ? [...currentConv.messages, newMessage] : [newMessage];
+
+    // If conversation doesn't exist yet, we need to build the message history manually
+    const allMessages = currentConv
+      ? [...currentConv.messages, newMessage]
+      : [newMessage];
 
     const apiMessages = allMessages.map(m => ({
       role: m.sender === 'me' ? 'user' : 'assistant',
@@ -251,6 +317,7 @@ export function SimpleChatInterface() {
         },
         body: JSON.stringify({
           messages: apiMessages,
+          chatId: activeConversationId, // Pass the chatId
           knowledgeIds: validKnowledgeIds,
         }),
       });
@@ -259,12 +326,47 @@ export function SimpleChatInterface() {
         throw new Error('Failed to get response');
       }
 
+      // Check if backend created a new chat and get the actual chat ID
+      const actualChatId = response.headers.get('X-Chat-Id');
+      const chatIdToUse = actualChatId || activeConversationId;
+
+      // Get sources from response headers
+      const sourcesHeader = response.headers.get('X-Sources');
+      let messageSources: string[] = [];
+      if (sourcesHeader) {
+        try {
+          messageSources = JSON.parse(sourcesHeader);
+        } catch (e) {
+          console.error('Failed to parse sources:', e);
+        }
+      }
+
+      if (actualChatId && actualChatId !== activeConversationId) {
+        // Backend created a new chat, update our state and URL
+        setActiveConversationId(actualChatId);
+
+        // Update conversations to use the correct ID
+        setConversations(prev => prev.map(conv =>
+          conv.id === activeConversationId
+            ? { ...conv, id: actualChatId }
+            : conv
+        ));
+
+        // Update URL without reload
+        router.push(`/chat/${actualChatId}`);
+      }
+
       // Read the streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
       let botMessageText = '';
+      let hasCreatedBotMessage = false;
 
       if (reader) {
+        // Batch updates to reduce re-renders - only update every 100ms
+        let lastUpdateTime = Date.now();
+        const UPDATE_INTERVAL = 100; // milliseconds
+
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
@@ -279,6 +381,45 @@ export function SimpleChatInterface() {
                 const data = JSON.parse(jsonStr);
                 if (data) {
                   botMessageText += data;
+
+                  // Only update UI if enough time has passed OR if this is the first chunk
+                  const now = Date.now();
+                  const shouldUpdate = !hasCreatedBotMessage || (now - lastUpdateTime >= UPDATE_INTERVAL);
+
+                  if (shouldUpdate) {
+                    lastUpdateTime = now;
+
+                    // Update message in real-time using the correct chat ID
+                    setConversations(prev => prev.map(conv => {
+                      if (conv.id !== chatIdToUse) return conv;
+
+                      const lastMsg = conv.messages[conv.messages.length - 1];
+                      if (lastMsg && lastMsg.sender === 'bot') {
+                        // Update existing bot message
+                        hasCreatedBotMessage = true;
+                        return {
+                          ...conv,
+                          messages: [
+                            ...conv.messages.slice(0, -1),
+                            { ...lastMsg, content: botMessageText }
+                          ]
+                        };
+                      } else {
+                        // Add new bot message
+                        hasCreatedBotMessage = true;
+                        return {
+                          ...conv,
+                          messages: [...conv.messages, {
+                            id: botMessageId,
+                            content: botMessageText,
+                            sender: 'bot',
+                            timestamp: new Date().toISOString(),
+                            sources: messageSources.length > 0 ? JSON.stringify(messageSources) : undefined,
+                          }]
+                        };
+                      }
+                    }));
+                  }
                 }
               } catch (e) {
                 // Skip malformed JSON
@@ -286,32 +427,58 @@ export function SimpleChatInterface() {
             }
           }
         }
+
+        // Final update with complete message
+        if (botMessageText) {
+          setConversations(prev => prev.map(conv => {
+            if (conv.id !== chatIdToUse) return conv;
+
+            const lastMsg = conv.messages[conv.messages.length - 1];
+            if (lastMsg && lastMsg.sender === 'bot' && lastMsg.id === botMessageId) {
+              // Update existing bot message with final content
+              return {
+                ...conv,
+                messages: [
+                  ...conv.messages.slice(0, -1),
+                  { ...lastMsg, content: botMessageText }
+                ],
+                lastMessageTime: new Date().toISOString(),
+              };
+            }
+            return conv;
+          }));
+        }
       }
 
-      const botMessage: Message = {
-        id: uuidv4(),
-        content: botMessageText || 'I received your message!',
-        sender: 'bot',
-        timestamp: new Date().toISOString()
-      };
+      // Ensure there's a message if stream was empty
+      if (!botMessageText) {
+        const fallbackMessage: Message = {
+          id: botMessageId,
+          content: 'I received your message!',
+          sender: 'bot',
+          timestamp: new Date().toISOString(),
+          sources: messageSources.length > 0 ? JSON.stringify(messageSources) : undefined,
+        };
 
-      setConversations(prev => prev.map(conv =>
-        conv.id === activeConversationId
-          ? {
-              ...conv,
-              messages: [...conv.messages, botMessage],
-              lastMessageTime: new Date().toISOString(),
-            }
-          : conv
-      ));
+        setConversations(prev => prev.map(conv =>
+          conv.id === chatIdToUse
+            ? {
+                ...conv,
+                messages: [...conv.messages, fallbackMessage],
+                lastMessageTime: new Date().toISOString(),
+              }
+            : conv
+        ));
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Fallback response
       const botMessage: Message = {
-        id: uuidv4(),
+        id: botMessageId,
         content: `I understand you said: "${text}". How can I help you with that?`,
         sender: 'bot',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        sources: undefined,
       };
 
       setConversations(prev => prev.map(conv =>
@@ -329,32 +496,59 @@ export function SimpleChatInterface() {
   };
 
   const handleNewConversation = useCallback(() => {
-    const newConv: Conversation = {
-      id: uuidv4(),
-      name: 'New Chat',
-      recipients: [{ id: 'ai', name: 'AI Assistant' }],
-      messages: [],
-      lastMessageTime: new Date().toISOString(),
-      unreadCount: 0,
-    };
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConversationId(newConv.id);
-    setSelectedKnowledge([]);
-  }, []);
+    // Create new chat ID and navigate to it
+    const newChatId = nanoid();
+    router.push(`/chat/${newChatId}`);
+  }, [router]);
 
-  const handleDeleteConversation = useCallback((id: string) => {
-    setConversations(prev => {
-      const filtered = prev.filter(c => c.id !== id);
-      if (id === activeConversationId) {
-        setActiveConversationId(filtered.length > 0 ? filtered[0].id : null);
+  const handleDeleteConversation = useCallback(async (id: string) => {
+    try {
+      const response = await fetch(`/api/chats/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete chat');
       }
-      return filtered;
-    });
-    toast({
-      title: "Chat Deleted",
-      description: "The conversation has been removed",
-    });
-  }, [activeConversationId, toast]);
+
+      // Determine where to navigate BEFORE updating state
+      let shouldNavigate = false;
+      let navigateTo = '';
+
+      setConversations(prev => {
+        const filtered = prev.filter(c => c.id !== id);
+
+        // If we deleted the active chat, we need to navigate
+        if (id === activeConversationId) {
+          shouldNavigate = true;
+          if (filtered.length > 0) {
+            navigateTo = `/chat/${filtered[0].id}`;
+          } else {
+            navigateTo = `/chat/${nanoid()}`;
+          }
+        }
+
+        return filtered;
+      });
+
+      // Navigate AFTER state update completes
+      if (shouldNavigate) {
+        router.push(navigateTo);
+      }
+
+      toast({
+        title: "Chat Deleted",
+        description: "The conversation has been removed",
+      });
+    } catch (error) {
+      console.error('Error deleting chat:', error);
+      toast({
+        title: "Error",
+        description: "Failed to delete chat",
+        variant: "destructive",
+      });
+    }
+  }, [activeConversationId, router, toast]);
 
   const handleToggleKnowledge = useCallback((id: string) => {
     if (!id) return; // Prevent null/undefined IDs
@@ -368,17 +562,41 @@ export function SimpleChatInterface() {
     setEditingName(currentName || 'New Chat');
   };
 
-  const handleSaveConversationName = () => {
+  const handleSaveConversationName = async () => {
     if (!editingConvId || !editingName.trim()) return;
 
-    setConversations(prev => prev.map(conv =>
-      conv.id === editingConvId
-        ? { ...conv, name: editingName.trim() }
-        : conv
-    ));
+    try {
+      const response = await fetch(`/api/chats/${editingConvId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editingName.trim() }),
+      });
 
-    setEditingConvId(null);
-    setEditingName('');
+      if (!response.ok) {
+        throw new Error('Failed to update chat name');
+      }
+
+      setConversations(prev => prev.map(conv =>
+        conv.id === editingConvId
+          ? { ...conv, name: editingName.trim() }
+          : conv
+      ));
+
+      setEditingConvId(null);
+      setEditingName('');
+
+      toast({
+        title: "Chat Renamed",
+        description: "Chat name has been updated",
+      });
+    } catch (error) {
+      console.error('Error updating chat name:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update chat name",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCancelEditing = () => {
@@ -450,7 +668,7 @@ export function SimpleChatInterface() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto p-2">
-              {conversations.length === 0 ? (
+              {sortedConversations.length === 0 && hasLoadedInitialData.current ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4 animate-in fade-in duration-500">
                   <svg className="h-12 w-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -459,17 +677,17 @@ export function SimpleChatInterface() {
                   <p className="text-xs opacity-70">Start a new conversation</p>
                 </div>
               ) : (
-                conversations.map(conv => (
+                sortedConversations.map(conv => (
                   <div
                     key={conv.id}
                     onClick={() => {
                       if (editingConvId !== conv.id) {
-                        setActiveConversationId(conv.id);
+                        router.push(`/chat/${conv.id}`);
                         setShowMobileSidebar(false);
                       }
                     }}
                     className={cn(
-                      "p-3 rounded-lg mb-1 transition-colors",
+                      "p-3 rounded-lg mb-1 transition-colors cursor-pointer",
                       editingConvId === conv.id
                         ? "bg-muted"
                         : activeConversationId === conv.id
@@ -573,7 +791,7 @@ export function SimpleChatInterface() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
-          {conversations.length === 0 ? (
+          {sortedConversations.length === 0 && hasLoadedInitialData.current ? (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4 animate-in fade-in duration-500">
               <svg className="h-12 w-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -582,16 +800,19 @@ export function SimpleChatInterface() {
               <p className="text-xs opacity-70">Start a new conversation</p>
             </div>
           ) : (
-            conversations.map(conv => (
+            sortedConversations.map(conv => (
             <div
               key={conv.id}
-              onClick={() => editingConvId !== conv.id && setActiveConversationId(conv.id)}
+              onClick={() => {
+                if (editingConvId !== conv.id) {
+                  router.push(`/chat/${conv.id}`);
+                }
+              }}
               className={cn(
-                "p-3 rounded-lg mb-1 transition-colors group",
+                "p-3 rounded-lg mb-1 transition-colors group cursor-pointer",
                 editingConvId === conv.id
                   ? "bg-muted"
                   : cn(
-                    "cursor-pointer",
                     conv.id === activeConversationId
                       ? "bg-muted"
                       : "hover:bg-muted/50"
@@ -663,7 +884,7 @@ export function SimpleChatInterface() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-dvh relative">
-        <div className="absolute top-0 left-0 right-0 z-50">
+        <div className="absolute top-0 left-0 right-0 z-[60]">
           <ChatHeader
             onShowKnowledge={() => setShowKnowledgePanel(!showKnowledgePanel)}
             conversationName={activeConversation?.name}
@@ -672,10 +893,10 @@ export function SimpleChatInterface() {
           />
         </div>
 
-        {/* Search Bar */}
+        {/* Search Bar - Below header, not overlapping messages */}
         {showSearch && (
-          <div className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-md border-b border-border/40 p-4 animate-in slide-in-from-top duration-200">
-            <div className="max-w-2xl mx-auto flex items-center gap-3">
+          <div className="absolute top-16 left-0 right-0 z-[55] bg-background border-b border-border shadow-lg">
+            <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
               <div className="flex-1 relative">
                 <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -685,7 +906,7 @@ export function SimpleChatInterface() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search in messages..."
-                  className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
+                  className="w-full bg-muted/30 border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A7CFF] focus:bg-background"
                   autoFocus
                 />
                 {searchQuery && (
@@ -699,8 +920,8 @@ export function SimpleChatInterface() {
                   </button>
                 )}
               </div>
-              <div className="text-xs text-muted-foreground whitespace-nowrap">
-                {searchQuery && `${filteredMessages.length} results`}
+              <div className="text-xs text-muted-foreground whitespace-nowrap min-w-[70px] text-right">
+                {searchQuery && `${filteredMessages.length} result${filteredMessages.length !== 1 ? 's' : ''}`}
               </div>
               <button
                 onClick={() => {
@@ -730,7 +951,12 @@ export function SimpleChatInterface() {
             className={cn(
               "min-h-screen flex flex-col",
               isMobileView ? "pt-24" : "pt-16",
-              "pb-32 sm:pb-24" // Extra padding for mobile to account for badges and input
+              // Add extra padding when search is active
+              showSearch && "pt-28",
+              // Add extra padding when knowledge is selected to prevent overlap
+              selectedKnowledge.length > 0
+                ? "pb-40 sm:pb-32"
+                : "pb-32 sm:pb-24"
             )}
           >
             <div className="flex-1 flex flex-col relative">
@@ -769,13 +995,18 @@ export function SimpleChatInterface() {
           </div>
         </ScrollArea>
 
-        <div className="absolute bottom-0 left-0 right-0 z-50 mb-[env(keyboard-inset-height,0px)] bg-background">
+        <div className="absolute bottom-0 left-0 right-0 z-[60] mb-[env(keyboard-inset-height,0px)] bg-background">
           <MessageInput
             onSendMessage={handleSendMessage}
             message={messageDraft}
             setMessage={setMessageDraft}
             isMobileView={isMobileView}
-            knowledgeBases={knowledgeBases}
+            knowledgeBases={knowledgeBases.map(kb => ({
+              id: kb.id,
+              name: kb.name,
+              content: kb.content || '',
+              createdAt: kb.createdAt || kb.uploadedAt || new Date().toISOString(),
+            }))}
             selectedKnowledge={selectedKnowledge}
             onToggleKnowledge={handleToggleKnowledge}
           />
@@ -886,7 +1117,10 @@ export function SimpleChatInterface() {
             >
               {isUploading ? (
                 <>
-                  <LoadingSpinner size="sm" className="text-white" />
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
                   <span>Uploading...</span>
                 </>
               ) : (
@@ -949,7 +1183,7 @@ export function SimpleChatInterface() {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{kb.name}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(kb.createdAt).toLocaleDateString()}
+                            {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
                           </p>
                         </div>
                         {selectedKnowledge.includes(kb.id) && (
@@ -1108,7 +1342,10 @@ export function SimpleChatInterface() {
               >
                 {isUploading ? (
                   <>
-                    <LoadingSpinner size="sm" className="text-white" />
+                    <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
                     <span>Uploading...</span>
                   </>
                 ) : (
@@ -1186,7 +1423,7 @@ export function SimpleChatInterface() {
                           <div className="flex-1">
                             <p className="text-base font-medium">{kb.name}</p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {new Date(kb.createdAt).toLocaleDateString()}
+                              {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
                             </p>
                           </div>
                           {selectedKnowledge.includes(kb.id) && (

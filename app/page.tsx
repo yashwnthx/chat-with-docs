@@ -1,12 +1,18 @@
-"use client";
+'use client';
 
-import { SimpleChatInterface } from "@/components/SimpleChatInterface";
-import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { nanoid } from 'nanoid';
 
 export default function Home() {
-  return (
-    <ErrorBoundary>
-      <SimpleChatInterface />
-    </ErrorBoundary>
-  );
+  const router = useRouter();
+
+  useEffect(() => {
+    // Instant redirect - no delay
+    const newChatId = nanoid();
+    router.replace(`/chat/${newChatId}`);
+  }, [router]);
+
+  // Return nothing - instant redirect means this won't be seen
+  return null;
 }
