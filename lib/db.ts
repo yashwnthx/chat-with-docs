@@ -111,9 +111,12 @@ export const db = {
     },    async create({ data }: any) {
       // Generate ID using nanoid if not provided (Chat table uses text IDs)
       const { nanoid } = await import('nanoid');
+      const now = new Date().toISOString();
       const chatData = {
         ...data,
         id: data.id || nanoid(10),
+        updatedAt: data.updatedAt || now,
+        createdAt: data.createdAt || now,
       };
 
       const { data: result, error } = await supabaseAdmin
@@ -224,9 +227,12 @@ export const db = {
     async create({ data }: any) {
       // Generate ID using nanoid if not provided (Knowledge table uses text IDs)
       const { nanoid } = await import('nanoid');
+      const now = new Date().toISOString();
       const knowledgeData = {
         ...data,
         id: data.id || nanoid(10),
+        createdAt: data.createdAt || now,
+        uploadedAt: data.uploadedAt || now,
       };
 
       const { data: result, error } = await supabaseAdmin
