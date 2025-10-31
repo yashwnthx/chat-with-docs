@@ -7,48 +7,72 @@ export const db = {
   chat: {
     async findUnique({ where, include }: { where: { id: string }, include?: any }) {
       let selectQuery = '*';
-
-      if (include?.messages || include?.knowledge) {
-        const selects = ['*'];
-        if (include?.messages) selects.push('messages:Message(*)');
-        if (include?.knowledge) selects.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
-        selectQuery = selects.join(', ');
+      
+      if (include) {
+        const parts = ['*'];
+        if (include.messages) {
+          parts.push('messages:Message(*)');
+        }
+        if (include.knowledge) {
+          parts.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
+        }
+        selectQuery = parts.join(', ');
       }
-
+      
       const { data, error } = await supabaseAdmin
         .from('Chat')
         .select(selectQuery)
         .eq('id', where.id)
-        .single();
-
+        .maybeSingle();
+      
       if (error) throw error;
       return data;
     },
 
-    async findFirst({ where, include }: { where: { sessionId: string }, include?: any }) {
+    async findFirst({ where, include }: { where: { sessionId: string; isActive?: boolean }, include?: any }) {
       let selectQuery = '*';
-
-      if (include?.messages || include?.knowledge) {
-        const selects = ['*'];
-        if (include?.messages) selects.push('messages:Message(*)');
-        if (include?.knowledge) selects.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
-        selectQuery = selects.join(', ');
+      
+      if (include) {
+        const parts = ['*'];
+        if (include.messages) {
+          parts.push('messages:Message(*)');
+        }
+        if (include.knowledge) {
+          parts.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
+        }
+        selectQuery = parts.join(', ');
       }
-
-      const { data, error } = await supabaseAdmin
+      
+      let query = supabaseAdmin
         .from('Chat')
         .select(selectQuery)
-        .eq('sessionId', where.sessionId)
-        .single();
-
+        .eq('sessionId', where.sessionId);
+      
+      if (where.isActive !== undefined) {
+        query = query.eq('isActive', where.isActive);
+      }
+      
+      const { data, error } = await query.maybeSingle();
+      
       if (error) throw error;
       return data;
-    },    async findMany({ where, orderBy, include }: any = {}) {
-      let query = supabaseAdmin.from('Chat').select('*');
+    },
 
-      if (include?.messages) {
-        query = supabaseAdmin.from('Chat').select('*, messages:Message(*)');
+    async findMany({ where, orderBy, include }: any = {}) {
+      let selectQuery = '*';
+      
+      if (include) {
+        const parts = ['*'];
+        if (include.messages) {
+          parts.push('messages:Message(*)');
+        }
+        if (include.knowledge) {
+          parts.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
+        }
+        selectQuery = parts.join(', ');
       }
+      
+      let query = supabaseAdmin.from('Chat').select(selectQuery);
 
       if (where?.isActive !== undefined) {
         query = query.eq('isActive', where.isActive);
