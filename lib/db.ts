@@ -6,27 +6,41 @@ import { supabaseAdmin } from './supabase';
 export const db = {
   chat: {
     async findUnique({ where, include }: { where: { id: string }, include?: any }) {
-      let selectQuery = '*';
-
-      if (include) {
-        const parts = ['*'];
-        if (include.messages) {
-          parts.push('messages:Message(*)');
-        }
-        if (include.knowledge) {
-          parts.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
-        }
-        selectQuery = parts.join(', ');
-      }
-
-      const { data, error } = await supabaseAdmin
+      // For Supabase, we need to fetch the main record first
+      const { data: chat, error: chatError } = await supabaseAdmin
         .from('Chat')
-        .select(selectQuery)
+        .select('*')
         .eq('id', where.id)
         .maybeSingle();
 
-      if (error) throw error;
-      return data;
+      if (chatError) throw chatError;
+      if (!chat) return null;
+
+      // Then fetch related data if needed
+      if (include) {
+        if (include.messages) {
+          const { data: messages, error: messagesError } = await supabaseAdmin
+            .from('Message')
+            .select('*')
+            .eq('chatId', where.id)
+            .order('timestamp', { ascending: true });
+
+          if (messagesError) throw messagesError;
+          chat.messages = messages || [];
+        }
+
+        if (include.knowledge) {
+          const { data: knowledgeLinks, error: knowledgeError } = await supabaseAdmin
+            .from('KnowledgeOnChat')
+            .select('*, knowledge:Knowledge(*)')
+            .eq('chatId', where.id);
+
+          if (knowledgeError) throw knowledgeError;
+          chat.knowledge = knowledgeLinks || [];
+        }
+      }
+
+      return chat;
     },
 
     async findFirst({ where, include }: { where: { sessionId: string; isActive?: boolean }, include?: any }) {
