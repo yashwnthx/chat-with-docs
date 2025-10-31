@@ -2,10 +2,17 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
 // GET all chats
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const deviceId = searchParams.get('deviceId');
+
+    if (!deviceId) {
+      return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
+    }
+
     const chats = await db.chat.findMany({
-      where: { isActive: true },
+      where: { isActive: true, deviceId },
       orderBy: { updatedAt: 'desc' },
       include: {
         messages: {
@@ -29,13 +36,19 @@ export async function GET() {
 // POST create new chat
 export async function POST(req: Request) {
   try {
-    const { title } = await req.json();
+    const { title, deviceId } = await req.json();
+
+    if (!deviceId) {
+      return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
+    }
+
     const { nanoid } = await import('nanoid');
 
     const chat = await db.chat.create({
       data: {
         sessionId: nanoid(10),
         title: title || 'New Chat',
+        deviceId,
       },
     });
 

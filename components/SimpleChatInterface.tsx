@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { nanoid } from 'nanoid';
 import { Message, Conversation, KnowledgeBase } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { getDeviceId } from '@/lib/device-id';
 
 interface SimpleChatInterfaceProps {
   chatId: string;
@@ -116,10 +117,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
     // Load data silently in background without blocking UI
     (async () => {
       try {
+        // Get device ID for filtering
+        const deviceId = getDeviceId();
+
         // Load all data in parallel
         const [chatsResponse, kbResponse] = await Promise.all([
-          fetch('/api/chats'),
-          fetch('/api/knowledge'),
+          fetch(`/api/chats?deviceId=${deviceId}`),
+          fetch(`/api/knowledge?deviceId=${deviceId}`),
         ]);
 
         if (chatsResponse.ok) {
@@ -310,6 +314,9 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       // Filter out any null/undefined knowledge IDs
       const validKnowledgeIds = selectedKnowledge.filter(id => id != null);
 
+      // Get device ID for this request
+      const deviceId = getDeviceId();
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: {
@@ -319,6 +326,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
           messages: apiMessages,
           chatId: activeConversationId, // Pass the chatId
           knowledgeIds: validKnowledgeIds,
+          deviceId,
         }),
       });
 
@@ -1051,6 +1059,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('name', file.name);
+                formData.append('deviceId', getDeviceId());
 
                 try {
                   const response = await fetch('/api/knowledge', {
@@ -1276,6 +1285,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                   const formData = new FormData();
                   formData.append('file', file);
                   formData.append('name', file.name);
+                  formData.append('deviceId', getDeviceId());
 
                   try {
                     const response = await fetch('/api/knowledge', {

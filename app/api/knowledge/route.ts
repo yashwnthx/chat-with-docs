@@ -4,10 +4,17 @@ import { NextResponse } from 'next/server';
 
 
 // GET all knowledge bases
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const deviceId = searchParams.get('deviceId');
+
+    if (!deviceId) {
+      return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
+    }
+
     const knowledge = await db.knowledge.findMany({
-      where: { isActive: true },
+      where: { isActive: true, deviceId },
       orderBy: { uploadedAt: 'desc' },
     });
 
@@ -24,6 +31,11 @@ export async function POST(req: Request) {
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const textContent = formData.get('text') as string; // Manual text input option
+    const deviceId = formData.get('deviceId') as string;
+
+    if (!deviceId) {
+      return NextResponse.json({ error: 'Device ID required' }, { status: 400 });
+    }
 
     // If manual text is provided, use that instead of file
     if (textContent && textContent.trim()) {
@@ -35,6 +47,7 @@ export async function POST(req: Request) {
           fileType: 'text/plain',
           fileSize: Buffer.byteLength(textContent, 'utf8'),
           documentCount: Math.max(1, Math.ceil(textContent.split(/\s+/).length / 500)),
+          deviceId,
         } as any,
       });
       return NextResponse.json({ knowledge });
@@ -147,6 +160,7 @@ This file type may not contain extractable text. Please provide the content manu
         fileSize: file.size,
         documentCount,
         hasImages,
+        deviceId,
       } as any,
     });
 

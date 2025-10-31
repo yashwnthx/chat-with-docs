@@ -82,6 +82,11 @@ export const db = {
         query = query.eq('sessionId', where.sessionId);
       }
 
+      // Filter by deviceId if provided
+      if (where?.deviceId) {
+        query = query.eq('deviceId', where.deviceId);
+      }
+
       if (orderBy?.updatedAt) {
         query = query.order('updatedAt', { ascending: orderBy.updatedAt === 'asc' });
       }
@@ -89,9 +94,7 @@ export const db = {
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
-    },
-
-    async create({ data }: any) {
+    },    async create({ data }: any) {
       const { data: result, error } = await supabaseAdmin
         .from('Chat')
         .insert(data)
@@ -178,12 +181,15 @@ export const db = {
         query = query.in('id', where.id.in);
       }
 
+      // Filter by deviceId if provided
+      if (where?.deviceId) {
+        query = query.eq('deviceId', where.deviceId);
+      }
+
       const { data, error } = await query;
       if (error) throw error;
       return data || [];
-    },
-
-    async findUnique({ where }: { where: { id: string } }) {
+    },    async findUnique({ where }: { where: { id: string } }) {
       const { data, error } = await supabaseAdmin
         .from('Knowledge')
         .select('*')

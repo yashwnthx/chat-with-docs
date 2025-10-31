@@ -12,7 +12,7 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
 export const maxDuration = 60;
 
 // Handle image generation requests using Gemini Imagen
-async function handleImageGeneration(userPrompt: string, messages: any[], chatId: string | null) {
+async function handleImageGeneration(userPrompt: string, messages: any[], chatId: string | null, deviceId: string) {
   try {
     // Extract the actual image description from the prompt
     let imagePrompt = userPrompt;
@@ -77,6 +77,7 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
         data: {
           sessionId: nanoid(10),
           title: userPrompt.substring(0, 100),
+          deviceId,
         },
       });
     }
@@ -147,9 +148,17 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages, chatId, knowledgeIds = [] } = body;
+    const { messages, chatId, knowledgeIds = [], deviceId } = body;
 
-    console.log('Chat API called with:', { knowledgeIds, messageCount: messages?.length || 0 });
+    console.log('Chat API called with:', { knowledgeIds, messageCount: messages?.length || 0, deviceId });
+
+    // Validate deviceId
+    if (!deviceId) {
+      return new Response(
+        JSON.stringify({ error: 'Device ID is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Validate messages
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -170,7 +179,7 @@ export async function POST(req: Request) {
 
     if (isImageRequest && process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
       console.log('🎨 Detected image generation request');
-      return await handleImageGeneration(lastMessage, userMessages, chatId);
+      return await handleImageGeneration(lastMessage, userMessages, chatId, deviceId);
     }
 
     // Always use gemini-2.5-flash for all text and document queries
@@ -311,6 +320,7 @@ NEVER format like this:
         data: {
           sessionId: nanoid(10),
           title: userMessage.content.substring(0, 100),
+          deviceId,
         },
       });
 
