@@ -73,20 +73,8 @@ export const db = {
     },
 
     async findMany({ where, orderBy, include }: any = {}) {
-      let selectQuery = '*';
-
-      if (include) {
-        const parts = ['*'];
-        if (include.messages) {
-          parts.push('messages:Message(*)');
-        }
-        if (include.knowledge) {
-          parts.push('knowledge:KnowledgeOnChat(knowledge:Knowledge(*))');
-        }
-        selectQuery = parts.join(', ');
-      }
-
-      let query = supabaseAdmin.from('Chat').select(selectQuery);
+      // First fetch the chats
+      let query = supabaseAdmin.from('Chat').select('*');
 
       if (where?.isActive !== undefined) {
         query = query.eq('isActive', where.isActive);
@@ -105,9 +93,61 @@ export const db = {
         query = query.order('updatedAt', { ascending: orderBy.updatedAt === 'asc' });
       }
 
-      const { data, error } = await query;
+      const { data: chats, error } = await query;
       if (error) throw error;
-      return data || [];
+      if (!chats || chats.length === 0) return [];
+
+      // Then fetch related data if needed
+      if (include) {
+        const chatIds = chats.map(c => c.id);
+
+        // Fetch messages for all chats
+        if (include.messages) {
+          const { data: allMessages, error: messagesError } = await supabaseAdmin
+            .from('Message')
+            .select('*')
+            .in('chatId', chatIds)
+            .order('timestamp', { ascending: include.messages.orderBy?.timestamp === 'asc' });
+          
+          if (messagesError) throw messagesError;
+
+          // Group messages by chatId
+          const messagesByChat = (allMessages || []).reduce((acc: any, msg: any) => {
+            if (!acc[msg.chatId]) acc[msg.chatId] = [];
+            acc[msg.chatId].push(msg);
+            return acc;
+          }, {});
+
+          // Add messages to each chat
+          chats.forEach(chat => {
+            chat.messages = messagesByChat[chat.id] || [];
+          });
+        }
+
+        // Fetch knowledge links for all chats
+        if (include.knowledge) {
+          const { data: knowledgeLinks, error: knowledgeError } = await supabaseAdmin
+            .from('KnowledgeOnChat')
+            .select('*, knowledge:Knowledge(*)')
+            .in('chatId', chatIds);
+          
+          if (knowledgeError) throw knowledgeError;
+
+          // Group knowledge by chatId
+          const knowledgeByChat = (knowledgeLinks || []).reduce((acc: any, link: any) => {
+            if (!acc[link.chatId]) acc[link.chatId] = [];
+            acc[link.chatId].push(link);
+            return acc;
+          }, {});
+
+          // Add knowledge to each chat
+          chats.forEach(chat => {
+            chat.knowledge = knowledgeByChat[chat.id] || [];
+          });
+        }
+      }
+
+      return chats;
     },    async create({ data }: any) {
       // Generate ID using nanoid if not provided (Chat table uses text IDs)
       const { nanoid } = await import('nanoid');
