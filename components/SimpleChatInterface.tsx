@@ -1484,17 +1484,39 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
         onOpenChange={(open) => !open && setDeleteConfirm(null)}
         title={deleteConfirm?.type === 'chat' ? 'Delete Chat?' : 'Delete Document?'}
         description={`Are you sure you want to delete "${deleteConfirm?.name}"? This action cannot be undone.`}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (deleteConfirm) {
             if (deleteConfirm.type === 'chat') {
               handleDeleteConversation(deleteConfirm.id);
             } else {
-              setKnowledgeBases(prev => prev.filter(k => k.id !== deleteConfirm.id));
-              setSelectedKnowledge(prev => prev.filter(id => id !== deleteConfirm.id));
-              toast({
-                title: "Document Deleted",
-                description: "The document has been removed",
-              });
+              // Delete document from database
+              try {
+                const response = await fetch(`/api/knowledge/${deleteConfirm.id}`, {
+                  method: 'DELETE',
+                });
+
+                if (response.ok) {
+                  setKnowledgeBases(prev => prev.filter(k => k.id !== deleteConfirm.id));
+                  setSelectedKnowledge(prev => prev.filter(id => id !== deleteConfirm.id));
+                  toast({
+                    title: "Document Deleted",
+                    description: "The document has been removed",
+                  });
+                } else {
+                  toast({
+                    title: "Delete Failed",
+                    description: "Could not delete the document",
+                    variant: "destructive",
+                  });
+                }
+              } catch (error) {
+                console.error('Error deleting document:', error);
+                toast({
+                  title: "Delete Failed",
+                  description: "An error occurred while deleting",
+                  variant: "destructive",
+                });
+              }
             }
             setDeleteConfirm(null);
           }

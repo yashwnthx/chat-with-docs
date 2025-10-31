@@ -108,7 +108,7 @@ export const db = {
             .select('*')
             .in('chatId', chatIds)
             .order('timestamp', { ascending: include.messages.orderBy?.timestamp === 'asc' });
-          
+
           if (messagesError) throw messagesError;
 
           // Group messages by chatId
@@ -130,7 +130,7 @@ export const db = {
             .from('KnowledgeOnChat')
             .select('*, knowledge:Knowledge(*)')
             .in('chatId', chatIds);
-          
+
           if (knowledgeError) throw knowledgeError;
 
           // Group knowledge by chatId
