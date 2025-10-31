@@ -46,12 +46,25 @@ export default function ChatInput({
       return;
     }
 
-    // Submit on Enter (without Shift)
-    if (e.key === 'Enter' && !e.shiftKey && !showMentions) {
-      e.preventDefault();
-      const form = e.currentTarget.form;
-      if (form) {
-        form.requestSubmit();
+    // Submit on Enter (without Shift) OR Ctrl/Cmd + Enter
+    if (e.key === 'Enter' && !showMentions) {
+      // Ctrl/Cmd + Enter always sends
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const form = e.currentTarget.form;
+        if (form && input.trim()) {
+          form.requestSubmit();
+        }
+        return;
+      }
+
+      // Plain Enter sends (Shift+Enter for new line)
+      if (!e.shiftKey) {
+        e.preventDefault();
+        const form = e.currentTarget.form;
+        if (form && input.trim()) {
+          form.requestSubmit();
+        }
       }
     }
   };
@@ -251,11 +264,29 @@ export function MessageInput({
       return;
     }
 
-    if (e.key === 'Enter' && !e.shiftKey && !showMentions) {
-      e.preventDefault();
-      handleSend();
-      if (isMobileView && textareaRef.current) {
-        textareaRef.current.blur();
+    // Submit on Enter (without Shift) OR Ctrl/Cmd + Enter
+    if (e.key === 'Enter' && !showMentions) {
+      // Ctrl/Cmd + Enter always sends
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        if (message.trim()) {
+          handleSend();
+          if (isMobileView && textareaRef.current) {
+            textareaRef.current.blur();
+          }
+        }
+        return;
+      }
+
+      // Plain Enter sends (Shift+Enter for new line)
+      if (!e.shiftKey) {
+        e.preventDefault();
+        if (message.trim()) {
+          handleSend();
+          if (isMobileView && textareaRef.current) {
+            textareaRef.current.blur();
+          }
+        }
       }
     }
   };
@@ -397,6 +428,7 @@ export function MessageInput({
               onChange={handleChange}
               onKeyDown={handleKeyDown}
               placeholder="Ask anything"
+              title="Press Enter to send, Shift+Enter for new line, Ctrl/Cmd+Enter to force send"
               rows={1}
               className="w-full bg-background/80 border border-muted-foreground/20 rounded-[18px] pl-4 pr-10 py-2 text-base sm:text-sm focus:outline-none disabled:opacity-50 resize-none touch-manipulation"
               style={{

@@ -60,11 +60,17 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
-    const { title } = await req.json();
+    const body = await req.json();
+    const { title, isPinned } = body;
+
+    // Build update data object with only provided fields
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (isPinned !== undefined) updateData.isPinned = isPinned;
 
     const chat = await db.chat.update({
       where: { id },
-      data: { title },
+      data: updateData,
     });
 
     return NextResponse.json({ chat });

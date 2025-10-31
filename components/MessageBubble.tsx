@@ -4,7 +4,6 @@ import { memo, useState } from 'react';
 import { cn } from "@/lib/utils";
 import { Message } from "@/types";
 import { useTheme } from "next-themes";
-import { FormattedMessage } from "./FormattedMessage";
 import { useToast } from "@/hooks/use-toast";
 
 interface MessageBubbleProps {
@@ -22,7 +21,7 @@ export const MessageBubble = memo(function MessageBubble({
   isLastUserMessage,
   justSent,
   isMobileView = false,
-  isFirstMessage = false
+  isFirstMessage = false,
 }: MessageBubbleProps) {
   const { theme, systemTheme } = useTheme();
   const effectiveTheme = theme === "system" ? systemTheme : theme;
@@ -70,7 +69,7 @@ export const MessageBubble = memo(function MessageBubble({
   `;
 
   return (
-    <div className="flex w-full flex-col relative z-10">
+    <div className="flex w-full flex-col relative z-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* Spacer before messages */}
       <div className="h-1 bg-background" />
 
@@ -171,11 +170,7 @@ export const MessageBubble = memo(function MessageBubble({
             ) : (
               <div className="flex flex-col">
                 <div className="text-[14px] whitespace-pre-wrap">
-                  {isMe ? (
-                    message.content
-                  ) : (
-                    <FormattedMessage content={message.content} sources={message.sources} />
-                  )}
+                  {message.content}
                 </div>
               </div>
             )}

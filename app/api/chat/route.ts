@@ -193,31 +193,10 @@ export async function POST(req: Request) {
     }
 
     // Get knowledge base context if knowledge IDs provided
-    let systemPrompt = `You are a friendly, casual AI chatting via text message. Keep your responses conversational and natural, like you're texting a friend.
+    let systemPrompt = `You are a helpful AI assistant.
 
-CRITICAL FORMATTING RULES - MUST FOLLOW:
-- NEVER use asterisks (*) or double asterisks (**) for formatting
-- NEVER use bullet points or numbered lists
-- NEVER use markdown syntax of any kind
-- NO bold, italic, or special formatting
-- Write in plain text only, like a regular text message
-- If listing things, just use natural paragraphs with line breaks between items
-- Be conversational and casual, like texting a friend
-- Use contractions and natural language
-
-Example of good response:
-"Hey! So here's what I found...
-
-First thing is this really cool point about whatever.
-
-Then there's also this other thing that's super important.
-
-And lastly, this final bit wraps it all up nicely!"
-
-NEVER format like this:
-"**Key Points:**
-* Point one
-* Point two"`;
+Respond naturally in plain text. No special formatting, no markdown, no bold/italic.
+Just write like a human having a normal conversation.`;
 
     let knowledgeSourceNames: string[] = [];
 
@@ -247,37 +226,14 @@ NEVER format like this:
           })
           .join('\n\n---\n\n');
 
-        systemPrompt = `You are a friendly, casual AI chatting via text message. Keep your responses conversational and natural, like you're texting a friend.
+        systemPrompt = `You are a helpful AI assistant.
 
 You have access to these documents:
 
 ${knowledgeContext}
 
-CRITICAL FORMATTING RULES - MUST FOLLOW:
-- NEVER use asterisks (*) or double asterisks (**) for formatting
-- NEVER use bullet points or numbered lists
-- NEVER use markdown syntax of any kind
-- NO bold, italic, or special formatting
-- Write in plain text only, like a regular text message
-- Answer questions using info from the documents naturally
-- If listing things, just use natural paragraphs with line breaks
-- Be conversational and casual, like texting a friend
-- NO citations or file names in your response
-- The system will show which documents were used separately
-
-Example of good response:
-"Hey! So from what I found, here's the deal...
-
-The main thing is this really important point that came up.
-
-Also worth noting is this other aspect that matters.
-
-And that pretty much covers it!"
-
-NEVER format like this:
-"**Key Points:**
-* Point one
-* Point two"`;
+Answer questions based on the documents in plain text. No markdown, no formatting.
+Just write naturally like a human would.`;
         console.log('📋 System prompt length:', systemPrompt.length, 'characters');
       }
     }

@@ -7,6 +7,7 @@ import { MessageList } from './MessageList';
 import { ChatHeader } from './ChatHeader';
 import { ScrollArea } from './ui/scroll-area';
 import { ConfirmDialog } from './ConfirmDialog';
+import { SwipeableChatItem } from './SwipeableChatItem';
 import { cn } from '@/lib/utils';
 import { nanoid } from 'nanoid';
 import { Message, Conversation, KnowledgeBase } from '@/types';
@@ -38,6 +39,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingChat, setIsLoadingChat] = useState(false); // Start as false to prevent flash
+  const [swipedChatId, setSwipedChatId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedInitialData = useRef(false); // Track if we've loaded data to prevent blinking
 
@@ -49,6 +51,11 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   // Memoize sorted conversations to prevent unnecessary re-renders
   const sortedConversations = useMemo(() => {
     return [...conversations].sort((a, b) => {
+      // Pinned chats first
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+
+      // Then sort by time
       const timeA = new Date(a.lastMessageTime || 0).getTime();
       const timeB = new Date(b.lastMessageTime || 0).getTime();
       return timeB - timeA; // Most recent first
@@ -145,6 +152,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
               })),
               lastMessageTime: chat.updatedAt,
               unreadCount: 0,
+              pinned: chat.isPinned || false,
             }));
 
           // Update UI immediately when data arrives
@@ -545,18 +553,49 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       }
 
       toast({
-        title: "Chat Deleted",
-        description: "The conversation has been removed",
+        title: "Chat deleted",
       });
     } catch (error) {
       console.error('Error deleting chat:', error);
       toast({
-        title: "Error",
-        description: "Failed to delete chat",
+        title: "Could not delete chat",
         variant: "destructive",
       });
     }
   }, [activeConversationId, router, toast]);
+
+  const handleTogglePinChat = useCallback(async (id: string) => {
+    try {
+      const conv = conversations.find(c => c.id === id);
+      if (!conv) return;
+
+      const newPinnedState = !conv.pinned;
+
+      const response = await fetch(`/api/chats/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isPinned: newPinnedState }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update chat');
+      }
+
+      setConversations(prev => prev.map(c =>
+        c.id === id ? { ...c, pinned: newPinnedState } : c
+      ));
+
+      toast({
+        title: newPinnedState ? "Chat pinned" : "Chat unpinned",
+      });
+    } catch (error) {
+      console.error('Error toggling pin:', error);
+      toast({
+        title: "Could not update chat",
+        variant: "destructive",
+      });
+    }
+  }, [conversations, toast]);
 
   const handleToggleKnowledge = useCallback((id: string) => {
     if (!id) return; // Prevent null/undefined IDs
@@ -594,14 +633,12 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       setEditingName('');
 
       toast({
-        title: "Chat Renamed",
-        description: "Chat name has been updated",
+        title: "Chat renamed",
       });
     } catch (error) {
       console.error('Error updating chat name:', error);
       toast({
-        title: "Error",
-        description: "Failed to update chat name",
+        title: "Could not rename chat",
         variant: "destructive",
       });
     }
@@ -627,8 +664,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
     ));
 
     toast({
-      title: "Document Renamed",
-      description: "Document name has been updated",
+      title: "Document renamed",
     });
 
     setEditingDocId(null);
@@ -641,12 +677,12 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   };
 
   return (
-    <div className="flex h-dvh bg-gray-100 dark:bg-background overflow-hidden">
+    <div className="flex h-dvh bg-background overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {showMobileSidebar && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden animate-in fade-in duration-200"
+            className="fixed inset-0 bg-black/10 z-40 lg:hidden animate-in fade-in duration-200"
             onClick={() => setShowMobileSidebar(false)}
           />
           <div className="fixed inset-y-0 left-0 w-64 bg-background border-r border-border/40 z-50 lg:hidden animate-in slide-in-from-left duration-200">
@@ -685,99 +721,193 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                   <p className="text-xs opacity-70">Start a new conversation</p>
                 </div>
               ) : (
-                sortedConversations.map(conv => (
-                  <div
-                    key={conv.id}
-                    onClick={() => {
-                      if (editingConvId !== conv.id) {
-                        router.push(`/chat/${conv.id}`);
-                        setShowMobileSidebar(false);
-                      }
-                    }}
-                    className={cn(
-                      "p-3 rounded-lg mb-1 transition-colors cursor-pointer",
-                      editingConvId === conv.id
-                        ? "bg-muted"
-                        : activeConversationId === conv.id
-                        ? "bg-[#0A7CFF]/10 border border-[#0A7CFF]/20"
-                        : "hover:bg-muted"
-                    )}
-                  >
-                    {editingConvId === conv.id ? (
-                      <div className="space-y-2">
-                        <input
-                          type="text"
-                          value={editingName}
-                          onChange={(e) => setEditingName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleSaveConversationName();
-                            if (e.key === 'Escape') handleCancelEditing();
-                          }}
-                          autoFocus
-                          className="w-full px-3 py-2 text-sm font-medium bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
-                          placeholder="Chat name"
-                        />
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSaveConversationName();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm bg-[#0A7CFF] text-white rounded-lg hover:bg-[#0A7CFF]/90 transition-colors"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCancelEditing();
-                            }}
-                            className="flex-1 px-3 py-2 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                <>
+                  {/* Pinned Section */}
+                  {sortedConversations.some(c => c.pinned) && (
+                    <>
+                      <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Pinned
                       </div>
-                    ) : (
-                      <>
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="text-sm font-medium truncate flex-1">
-                            {conv.name || 'New Chat'}
-                          </p>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleStartEditingConversation(conv.id, conv.name || 'New Chat');
-                              }}
-                              className="p-1.5 hover:bg-muted active:bg-muted rounded-md touch-manipulation"
-                              aria-label="Edit chat name"
-                            >
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteConfirm({ type: 'chat', id: conv.id, name: conv.name || 'New Chat' });
-                              }}
-                              className="p-1.5 hover:bg-destructive/20 active:bg-destructive/20 rounded-md touch-manipulation"
-                              aria-label="Delete chat"
-                            >
-                              <svg className="h-4 w-4 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                              </svg>
-                            </button>
+                      {sortedConversations.filter(c => c.pinned).map(conv => (
+                        <div
+                          key={conv.id}
+                          onClick={() => {
+                            if (editingConvId !== conv.id) {
+                              router.push(`/chat/${conv.id}`);
+                              setShowMobileSidebar(false);
+                            }
+                          }}
+                          className={cn(
+                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group",
+                            editingConvId === conv.id
+                              ? "bg-muted"
+                              : activeConversationId === conv.id
+                              ? "bg-[#0A7CFF]/10 border border-[#0A7CFF]/20"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                {editingConvId === conv.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveConversationName();
+                                      if (e.key === 'Escape') handleCancelEditing();
+                                    }}
+                                    onBlur={handleSaveConversationName}
+                                    onClick={(e) => e.stopPropagation()}
+                                    autoFocus
+                                    className="flex-1 px-2 py-1 text-sm font-semibold bg-background border border-[#0A7CFF] rounded focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
+                                  />
+                                ) : (
+                                  <p
+                                    className="text-sm font-semibold truncate flex-1 cursor-text"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
+                                    }}
+                                    title="Click to edit"
+                                  >
+                                    {conv.name || 'New Chat'}
+                                  </p>
+                                )}
+                              </div>
+                              {editingConvId !== conv.id && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {getLastMessagePreview(conv)}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Pin button - Apple Notes style */}
+                            {editingConvId !== conv.id && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTogglePinChat(conv.id);
+                                }}
+                                className="flex-shrink-0 p-1 rounded transition-all"
+                                title={conv.pinned ? "Unpin" : "Pin"}
+                                aria-label={conv.pinned ? "Unpin chat" : "Pin chat"}
+                              >
+                                <svg
+                                  className={cn(
+                                    "h-5 w-5 transition-colors",
+                                    conv.pinned ? "text-amber-500" : "text-muted-foreground"
+                                  )}
+                                  fill={conv.pinned ? "currentColor" : "none"}
+                                  stroke="currentColor"
+                                  strokeWidth={conv.pinned ? 0 : 1.5}
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1 truncate">
-                          {getLastMessagePreview(conv)}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ))
+                      ))}
+                    </>
+                  )}
+
+                  {/* Unpinned Section */}
+                  {sortedConversations.some(c => !c.pinned) && (
+                    <>
+                      {sortedConversations.some(c => c.pinned) && (
+                        <div className="px-3 py-2 mt-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          Recent
+                        </div>
+                      )}
+                      {sortedConversations.filter(c => !c.pinned).map(conv => (
+                        <div
+                          key={conv.id}
+                          onClick={() => {
+                            if (editingConvId !== conv.id) {
+                              router.push(`/chat/${conv.id}`);
+                              setShowMobileSidebar(false);
+                            }
+                          }}
+                          className={cn(
+                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group",
+                            editingConvId === conv.id
+                              ? "bg-muted"
+                              : activeConversationId === conv.id
+                              ? "bg-[#0A7CFF]/10 border border-[#0A7CFF]/20"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                {editingConvId === conv.id ? (
+                                  <input
+                                    type="text"
+                                    value={editingName}
+                                    onChange={(e) => setEditingName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleSaveConversationName();
+                                      if (e.key === 'Escape') handleCancelEditing();
+                                    }}
+                                    onBlur={handleSaveConversationName}
+                                    onClick={(e) => e.stopPropagation()}
+                                    autoFocus
+                                    className="flex-1 px-2 py-1 text-sm font-semibold bg-background border border-[#0A7CFF] rounded focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
+                                  />
+                                ) : (
+                                  <p
+                                    className="text-sm font-semibold truncate flex-1 cursor-text"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
+                                    }}
+                                    title="Click to edit"
+                                  >
+                                    {conv.name || 'New Chat'}
+                                  </p>
+                                )}
+                              </div>
+                              {editingConvId !== conv.id && (
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {getLastMessagePreview(conv)}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Pin button - Apple Notes style */}
+                            {editingConvId !== conv.id && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleTogglePinChat(conv.id);
+                                }}
+                                className="flex-shrink-0 p-1 rounded transition-all"
+                                title={conv.pinned ? "Unpin" : "Pin"}
+                                aria-label={conv.pinned ? "Unpin chat" : "Pin chat"}
+                              >
+                                <svg
+                                  className={cn(
+                                    "h-5 w-5 transition-colors",
+                                    conv.pinned ? "text-amber-500" : "text-muted-foreground"
+                                  )}
+                                  fill={conv.pinned ? "currentColor" : "none"}
+                                  stroke="currentColor"
+                                  strokeWidth={conv.pinned ? 0 : 1.5}
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -808,84 +938,63 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
               <p className="text-xs opacity-70">Start a new conversation</p>
             </div>
           ) : (
-            sortedConversations.map(conv => (
-            <div
-              key={conv.id}
-              onClick={() => {
-                if (editingConvId !== conv.id) {
-                  router.push(`/chat/${conv.id}`);
-                }
-              }}
-              className={cn(
-                "p-3 rounded-lg mb-1 transition-colors group cursor-pointer",
-                editingConvId === conv.id
-                  ? "bg-muted"
-                  : cn(
-                    conv.id === activeConversationId
-                      ? "bg-muted"
-                      : "hover:bg-muted/50"
-                  )
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                {editingConvId === conv.id ? (
-                  <>
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveConversationName();
-                        if (e.key === 'Escape') handleCancelEditing();
-                      }}
-                      onBlur={handleSaveConversationName}
-                      autoFocus
-                      className="flex-1 px-2 py-1 text-sm font-medium bg-background border border-border rounded"
+            <>
+              {/* Pinned Section */}
+              {sortedConversations.some(c => c.pinned) && (
+                <>
+                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Pinned
+                  </div>
+                  {sortedConversations.filter(c => c.pinned).map(conv => (
+                    <SwipeableChatItem
+                      key={conv.id}
+                      conv={conv}
+                      swipedChatId={swipedChatId}
+                      setSwipedChatId={setSwipedChatId}
+                      setDeleteConfirm={setDeleteConfirm}
+                      activeConversationId={activeConversationId}
+                      editingConvId={editingConvId}
+                      editingName={editingName}
+                      setEditingName={setEditingName}
+                      handleSaveConversationName={handleSaveConversationName}
+                      handleCancelEditing={handleCancelEditing}
+                      handleTogglePinChat={handleTogglePinChat}
+                      handleStartEditingConversation={handleStartEditingConversation}
+                      getLastMessagePreview={getLastMessagePreview}
                     />
-                  </>
-                ) : (
-                  <>
-                    <p className="text-sm font-medium truncate flex-1">
-                      {conv.name || 'New Chat'}
-                    </p>
-                    <div className="flex items-center gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEditingConversation(conv.id, conv.name || 'New Chat');
-                        }}
-                        className="p-1.5 hover:bg-muted active:bg-muted rounded-md touch-manipulation"
-                        title="Edit name"
-                        aria-label="Edit chat name"
-                      >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteConfirm({ type: 'chat', id: conv.id, name: conv.name || 'New Chat' });
-                        }}
-                        className="p-1.5 hover:bg-destructive/20 active:bg-destructive/20 rounded-md touch-manipulation"
-                        title="Delete chat"
-                        aria-label="Delete chat"
-                      >
-                        <svg className="h-4 w-4 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-              {editingConvId !== conv.id && (
-                <p className="text-xs text-muted-foreground mt-1 truncate">
-                  {getLastMessagePreview(conv)}
-                </p>
+                  ))}
+                </>
               )}
-            </div>
-          ))
+
+              {/* Unpinned Section */}
+              {sortedConversations.some(c => !c.pinned) && (
+                <>
+                  {sortedConversations.some(c => c.pinned) && (
+                    <div className="px-3 py-2 mt-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Recent
+                    </div>
+                  )}
+                  {sortedConversations.filter(c => !c.pinned).map(conv => (
+                    <SwipeableChatItem
+                      key={conv.id}
+                      conv={conv}
+                      swipedChatId={swipedChatId}
+                      setSwipedChatId={setSwipedChatId}
+                      setDeleteConfirm={setDeleteConfirm}
+                      activeConversationId={activeConversationId}
+                      editingConvId={editingConvId}
+                      editingName={editingName}
+                      setEditingName={setEditingName}
+                      handleSaveConversationName={handleSaveConversationName}
+                      handleCancelEditing={handleCancelEditing}
+                      handleTogglePinChat={handleTogglePinChat}
+                      handleStartEditingConversation={handleStartEditingConversation}
+                      getLastMessagePreview={getLastMessagePreview}
+                    />
+                  ))}
+                </>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -901,48 +1010,38 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
           />
         </div>
 
-        {/* Search Bar - Below header, not overlapping messages */}
+        {/* Search Bar - Below header, compact version */}
         {showSearch && (
-          <div className="absolute top-16 left-0 right-0 z-[55] bg-background border-b border-border shadow-lg">
-            <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
-              <div className="flex-1 relative">
-                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search in messages..."
-                  className="w-full bg-muted/30 border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A7CFF] focus:bg-background"
-                  autoFocus
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground whitespace-nowrap min-w-[70px] text-right">
-                {searchQuery && `${filteredMessages.length} result${filteredMessages.length !== 1 ? 's' : ''}`}
-              </div>
+          <div className="absolute top-16 left-0 right-0 z-[55] px-4 py-2">
+            <div className="max-w-2xl mx-auto relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search in messages..."
+                className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A7CFF] shadow-lg"
+                autoFocus
+              />
               <button
                 onClick={() => {
                   setShowSearch(false);
                   setSearchQuery('');
                 }}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 aria-label="Close search"
               >
                 <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
+              {searchQuery && (
+                <div className="absolute -bottom-6 right-0 text-xs text-muted-foreground">
+                  {filteredMessages.length} result{filteredMessages.length !== 1 ? 's' : ''}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1024,11 +1123,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       {/* Knowledge Panel - Desktop (Overlay instead of fixed width) */}
       {showKnowledgePanel && !isMobile && (
         <>
-          <div
-            className="fixed inset-0 bg-black/20 z-40"
-            onClick={() => setShowKnowledgePanel(false)}
-          />
-          <div className="fixed top-0 right-0 bottom-0 w-96 border-l border-border/40 bg-background flex-col flex z-50 shadow-2xl animate-in slide-in-from-right duration-300">
+          <div className="fixed top-16 right-0 bottom-0 w-96 border-l border-border/40 bg-background flex-col flex z-50 shadow-2xl animate-in slide-in-from-right duration-300">
           <div className="p-4 border-b border-border/40 flex items-center justify-between">
             <h2 className="font-semibold">Knowledge Base</h2>
             <button
@@ -1052,8 +1147,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
 
                 setIsUploading(true);
                 toast({
-                  title: "Uploading...",
-                  description: `Uploading ${file.name}`,
+                  title: `Uploading ${file.name.length > 20 ? file.name.substring(0, 20) + '...' : file.name}`,
                 });
 
                 const formData = new FormData();
@@ -1073,8 +1167,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
 
                     if (!knowledgeData.id) {
                       toast({
-                        title: "Upload Failed",
-                        description: "No ID returned from server",
+                        title: "Upload failed",
                         variant: "destructive",
                       });
                       return;
@@ -1089,22 +1182,19 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
 
                     setKnowledgeBases(prev => [...prev, newKB]);
                     toast({
-                      title: "Upload Successful",
-                      description: `${file.name} has been uploaded`,
+                      title: "Uploaded",
                     });
                   } else {
                     const errorText = await response.text();
                     toast({
-                      title: "Upload Failed",
-                      description: errorText || "Failed to upload document",
+                      title: "Upload failed",
                       variant: "destructive",
                     });
                   }
                 } catch (error) {
                   console.error('Upload error:', error);
                   toast({
-                    title: "Upload Error",
-                    description: "An unexpected error occurred",
+                    title: "Upload failed",
                     variant: "destructive",
                   });
                 } finally {
@@ -1277,9 +1367,11 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                   if (!file) return;
 
                   setIsUploading(true);
+                  const truncatedName = file.name.length > 30
+                    ? file.name.substring(0, 30) + '...'
+                    : file.name;
                   toast({
-                    title: "Uploading...",
-                    description: `Uploading ${file.name}`,
+                    title: `Uploading ${truncatedName}`,
                   });
 
                   const formData = new FormData();
@@ -1299,8 +1391,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
 
                       if (!knowledgeData.id) {
                         toast({
-                          title: "Upload Failed",
-                          description: "No ID returned from server",
+                          title: "Upload failed",
                           variant: "destructive",
                         });
                         return;
@@ -1315,22 +1406,19 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
 
                       setKnowledgeBases(prev => [...prev, newKB]);
                       toast({
-                        title: "Upload Successful",
-                        description: `${file.name} has been uploaded`,
+                        title: "Uploaded",
                       });
                     } else {
                       const errorText = await response.text();
                       toast({
-                        title: "Upload Failed",
-                        description: errorText || "Failed to upload document",
+                        title: "Upload failed",
                         variant: "destructive",
                       });
                     }
                   } catch (error) {
                     console.error('Upload error:', error);
                     toast({
-                      title: "Upload Error",
-                      description: "An unexpected error occurred",
+                      title: "Upload failed",
                       variant: "destructive",
                     });
                   } finally {
@@ -1499,21 +1587,18 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                   setKnowledgeBases(prev => prev.filter(k => k.id !== deleteConfirm.id));
                   setSelectedKnowledge(prev => prev.filter(id => id !== deleteConfirm.id));
                   toast({
-                    title: "Document Deleted",
-                    description: "The document has been removed",
+                    title: "Document deleted",
                   });
                 } else {
                   toast({
-                    title: "Delete Failed",
-                    description: "Could not delete the document",
+                    title: "Could not delete document",
                     variant: "destructive",
                   });
                 }
               } catch (error) {
                 console.error('Error deleting document:', error);
                 toast({
-                  title: "Delete Failed",
-                  description: "An error occurred while deleting",
+                  title: "Could not delete document",
                   variant: "destructive",
                 });
               }
