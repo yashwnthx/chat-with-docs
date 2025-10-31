@@ -1,9 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
-
-const prisma = new PrismaClient();
 
 // GET specific knowledge base
 export async function GET(
@@ -12,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const knowledge = await prisma.knowledge.findUnique({
+    const knowledge = await db.knowledge.findUnique({
       where: { id },
     });
 
@@ -41,7 +39,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Content is required' }, { status: 400 });
     }
 
-    const knowledge = await prisma.knowledge.findUnique({
+    const knowledge = await db.knowledge.findUnique({
       where: { id },
     });
 
@@ -50,13 +48,15 @@ export async function PATCH(
     }
 
     // Update the content
-    const updated = await prisma.knowledge.update({
+    const updated = await db.knowledge.update({
       where: { id },
       data: {
         content,
         documentCount: Math.max(1, Math.ceil(content.split(/\s+/).length / 500)),
       } as any,
-    });    return NextResponse.json({ knowledge: updated });
+    });
+
+    return NextResponse.json({ knowledge: updated });
   } catch (error) {
     console.error('Error updating knowledge:', error);
     return NextResponse.json({ error: 'Failed to update knowledge' }, { status: 500 });
@@ -70,7 +70,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const knowledge = await prisma.knowledge.findUnique({
+    const knowledge = await db.knowledge.findUnique({
       where: { id },
     });
 
@@ -89,7 +89,7 @@ export async function DELETE(
     }
 
     // Hard delete from database (cascades to KnowledgeOnChat automatically)
-    await prisma.knowledge.delete({
+    await db.knowledge.delete({
       where: { id },
     });
 

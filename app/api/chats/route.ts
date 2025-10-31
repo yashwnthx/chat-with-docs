@@ -1,12 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
 
 // GET all chats
 export async function GET() {
   try {
-    const chats = await prisma.chat.findMany({
+    const chats = await db.chat.findMany({
       where: { isActive: true },
       orderBy: { updatedAt: 'desc' },
       include: {
@@ -34,7 +32,7 @@ export async function POST(req: Request) {
     const { title } = await req.json();
     const { nanoid } = await import('nanoid');
 
-    const chat = await prisma.chat.create({
+    const chat = await db.chat.create({
       data: {
         sessionId: nanoid(10),
         title: title || 'New Chat',

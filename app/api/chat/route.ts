@@ -1,12 +1,12 @@
 import { streamText, createDataStreamResponse } from 'ai';
 import { google } from '@ai-sdk/google';
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { nanoid } from 'nanoid';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 
-const prisma = new PrismaClient();
+
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GENERATIVE_AI_API_KEY || '');
 
 export const maxDuration = 60;
@@ -69,11 +69,11 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
     // Save to database
     let chat: any;
     if (chatId) {
-      chat = await prisma.chat.findUnique({ where: { id: chatId } });
+      chat = await db.chat.findUnique({ where: { id: chatId } });
     }
 
     if (!chat) {
-      chat = await prisma.chat.create({
+      chat = await db.chat.create({
         data: {
           sessionId: nanoid(10),
           title: userPrompt.substring(0, 100),
@@ -82,7 +82,7 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
     }
 
     // Save user message
-    await prisma.message.create({
+    await db.message.create({
       data: {
         chatId: chat.id,
         role: 'user',
@@ -93,7 +93,7 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
 
     // Save assistant message with image
     const responseText = `I've generated an image for you: "${imagePrompt}"\n\n![Generated Image](${savedImageUrl})`;
-    await prisma.message.create({
+    await db.message.create({
       data: {
         chatId: chat.id,
         role: 'assistant',
@@ -214,7 +214,7 @@ NEVER format like this:
 
     if (knowledgeIds.length > 0) {
       console.log('Loading knowledge bases:', knowledgeIds);
-      const knowledge = await prisma.knowledge.findMany({
+      const knowledge = await db.knowledge.findMany({
         where: { id: { in: knowledgeIds }, isActive: true },
       });
       console.log('Found knowledge bases:', knowledge.length);
@@ -302,12 +302,12 @@ NEVER format like this:
 
     let chat: any;
     if (chatId) {
-      chat = await prisma.chat.findUnique({ where: { id: chatId } });
+      chat = await db.chat.findUnique({ where: { id: chatId } });
     }
 
     if (!chat) {
       // Create new chat with unique session ID for sharing
-      chat = await prisma.chat.create({
+      chat = await db.chat.create({
         data: {
           sessionId: nanoid(10),
           title: userMessage.content.substring(0, 100),
@@ -316,7 +316,7 @@ NEVER format like this:
 
       // Link knowledge bases to chat
       if (knowledgeIds.length > 0) {
-        await prisma.knowledgeOnChat.createMany({
+        await db.knowledgeOnChat.createMany({
           data: knowledgeIds.map((kbId: string) => ({
             chatId: chat.id,
             knowledgeId: kbId,
@@ -326,7 +326,7 @@ NEVER format like this:
     }
 
     // Save user message
-    await prisma.message.create({
+    await db.message.create({
       data: {
         chatId: chat.id,
         role: 'user',
@@ -336,7 +336,7 @@ NEVER format like this:
     });
 
     // Save assistant message (will be updated as it streams)
-    const assistantMessage = await prisma.message.create({
+    const assistantMessage = await db.message.create({
       data: {
         chatId: chat.id,
         role: 'assistant',
@@ -347,7 +347,7 @@ NEVER format like this:
     });
 
     // Update chat timestamp
-    await prisma.chat.update({
+    await db.chat.update({
       where: { id: chat.id },
       data: { updatedAt: new Date() },
     });
@@ -358,7 +358,7 @@ NEVER format like this:
       try {
         const fullText = await result.text;
         if (fullText && fullText.trim()) {
-          await prisma.message.update({
+          await db.message.update({
             where: { id: assistantMessage.id },
             data: {
               content: fullText.trim(),

@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
 
 // GET specific chat with messages
 export async function GET(
@@ -10,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const chat = await prisma.chat.findUnique({
+    const chat = await db.chat.findUnique({
       where: { id },
       include: {
         messages: {
@@ -43,7 +41,7 @@ export async function DELETE(
   try {
     const { id } = await params;
     // Soft delete by setting isActive to false
-    await prisma.chat.update({
+    await db.chat.update({
       where: { id },
       data: { isActive: false } as any,
     });
@@ -64,7 +62,7 @@ export async function PATCH(
     const { id } = await params;
     const { title } = await req.json();
 
-    const chat = await prisma.chat.update({
+    const chat = await db.chat.update({
       where: { id },
       data: { title },
     });

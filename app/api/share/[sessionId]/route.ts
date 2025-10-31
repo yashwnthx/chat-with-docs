@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-
-const prisma = new PrismaClient();
 
 // GET shared chat by session ID
 export async function GET(
@@ -10,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { sessionId } = await params;
-    const chat: any = await prisma.chat.findFirst({
+    const chat: any = await db.chat.findFirst({
       where: { sessionId, isActive: true } as any,
       include: {
         messages: {

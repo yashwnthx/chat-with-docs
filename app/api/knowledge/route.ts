@@ -1,12 +1,12 @@
-import { PrismaClient } from '@prisma/client';
+import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 
-const prisma = new PrismaClient();
+
 
 // GET all knowledge bases
 export async function GET() {
   try {
-    const knowledge = await prisma.knowledge.findMany({
+    const knowledge = await db.knowledge.findMany({
       where: { isActive: true },
       orderBy: { uploadedAt: 'desc' },
     });
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
     // If manual text is provided, use that instead of file
     if (textContent && textContent.trim()) {
-      const knowledge = await prisma.knowledge.create({
+      const knowledge = await db.knowledge.create({
         data: {
           name: formData.get('name') as string || 'Text Document',
           content: textContent,
@@ -137,7 +137,7 @@ This file type may not contain extractable text. Please provide the content manu
     const documentCount = Math.max(1, Math.ceil(wordCount / 500));
 
     // Save to database (no filePath since Vercel filesystem is read-only)
-    const knowledge = await prisma.knowledge.create({
+    const knowledge = await db.knowledge.create({
       data: {
         name: file.name,
         content: content.substring(0, 50000), // Limit content length
