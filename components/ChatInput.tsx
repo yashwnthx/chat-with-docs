@@ -209,10 +209,10 @@ interface MessageInputProps {
   onToggleKnowledge?: (id: string) => void;
 }
 
-export function MessageInput({ 
-  onSendMessage, 
-  message, 
-  setMessage, 
+export function MessageInput({
+  onSendMessage,
+  message,
+  setMessage,
   isMobileView = false,
   knowledgeBases = [],
   selectedKnowledge = [],
@@ -274,14 +274,14 @@ export function MessageInput({
         setShowMentions(false);
       }
     }
-    
+
     // Auto-resize textarea
     const element = e.target;
     element.style.height = 'auto';
     const contentHeight = element.scrollHeight;
     const height = Math.min(200, Math.max(32, contentHeight));
     const containerHeight = height + 32;
-    
+
     element.style.height = `${height}px`;
     element.style.overflowY = height >= 200 ? 'auto' : 'hidden';
     document.documentElement.style.setProperty('--dynamic-height', `${containerHeight}px`);
@@ -355,7 +355,7 @@ export function MessageInput({
       )}
 
       {/* Input Area */}
-      <div 
+      <div
         className="w-full"
         style={{ height: "var(--dynamic-height, 64px)" }}
       >
@@ -363,7 +363,7 @@ export function MessageInput({
           <div className="relative w-full">
             {/* @ Mention Dropdown */}
             {showMentions && filteredKnowledge.length > 0 && (
-              <div 
+              <div
                 className="absolute bottom-full left-0 mb-2 w-full max-w-md bg-background border border-border rounded-xl shadow-xl overflow-hidden z-50"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -396,7 +396,7 @@ export function MessageInput({
               value={message}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              placeholder="iMessage"
+              placeholder="Ask anything"
               rows={1}
               className="w-full bg-background/80 border border-muted-foreground/20 rounded-[18px] pl-4 pr-10 py-2 text-base sm:text-sm focus:outline-none disabled:opacity-50 resize-none touch-manipulation"
               style={{
@@ -415,9 +415,9 @@ export function MessageInput({
                 className="absolute right-2 bottom-2 bg-[#0A7CFF] rounded-full p-1 text-white font-bold transition-colors"
                 aria-label="Send message"
               >
-                <svg 
-                  className="h-4 w-4" 
-                  strokeWidth={3} 
+                <svg
+                  className="h-4 w-4"
+                  strokeWidth={3}
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
