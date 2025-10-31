@@ -95,9 +95,16 @@ export const db = {
       if (error) throw error;
       return data || [];
     },    async create({ data }: any) {
+      // Generate ID using nanoid if not provided (Chat table uses text IDs)
+      const { nanoid } = await import('nanoid');
+      const chatData = {
+        ...data,
+        id: data.id || nanoid(10),
+      };
+
       const { data: result, error } = await supabaseAdmin
         .from('Chat')
-        .insert(data)
+        .insert(chatData)
         .select()
         .single();
 
@@ -201,9 +208,16 @@ export const db = {
     },
 
     async create({ data }: any) {
+      // Generate ID using nanoid if not provided (Knowledge table uses text IDs)
+      const { nanoid } = await import('nanoid');
+      const knowledgeData = {
+        ...data,
+        id: data.id || nanoid(10),
+      };
+
       const { data: result, error } = await supabaseAdmin
         .from('Knowledge')
-        .insert(data)
+        .insert(knowledgeData)
         .select()
         .single();
 
