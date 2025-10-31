@@ -7,7 +7,7 @@ export const db = {
   chat: {
     async findUnique({ where, include }: { where: { id: string }, include?: any }) {
       let selectQuery = '*';
-      
+
       if (include) {
         const parts = ['*'];
         if (include.messages) {
@@ -18,20 +18,20 @@ export const db = {
         }
         selectQuery = parts.join(', ');
       }
-      
+
       const { data, error } = await supabaseAdmin
         .from('Chat')
         .select(selectQuery)
         .eq('id', where.id)
         .maybeSingle();
-      
+
       if (error) throw error;
       return data;
     },
 
     async findFirst({ where, include }: { where: { sessionId: string; isActive?: boolean }, include?: any }) {
       let selectQuery = '*';
-      
+
       if (include) {
         const parts = ['*'];
         if (include.messages) {
@@ -42,25 +42,25 @@ export const db = {
         }
         selectQuery = parts.join(', ');
       }
-      
+
       let query = supabaseAdmin
         .from('Chat')
         .select(selectQuery)
         .eq('sessionId', where.sessionId);
-      
+
       if (where.isActive !== undefined) {
         query = query.eq('isActive', where.isActive);
       }
-      
+
       const { data, error } = await query.maybeSingle();
-      
+
       if (error) throw error;
       return data;
     },
 
     async findMany({ where, orderBy, include }: any = {}) {
       let selectQuery = '*';
-      
+
       if (include) {
         const parts = ['*'];
         if (include.messages) {
@@ -71,7 +71,7 @@ export const db = {
         }
         selectQuery = parts.join(', ');
       }
-      
+
       let query = supabaseAdmin.from('Chat').select(selectQuery);
 
       if (where?.isActive !== undefined) {

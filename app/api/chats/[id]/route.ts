@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const chat = await db.chat.findUnique({
+    const chat: any = await db.chat.findUnique({
       where: { id },
       include: {
         messages: {
@@ -26,7 +26,7 @@ export async function GET(
       return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ chat, messages: chat.messages });
+    return NextResponse.json({ chat, messages: chat.messages || [] });
   } catch (error) {
     console.error('Error fetching chat:', error);
     return NextResponse.json({ error: 'Failed to fetch chat' }, { status: 500 });
