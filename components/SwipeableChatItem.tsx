@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useSwipeable } from 'react-swipeable';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -39,6 +39,22 @@ export function SwipeableChatItem({
 }: SwipeableChatItemProps) {
   const router = useRouter();
   const [isSwiping, setIsSwiping] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+
+    if (showMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showMenu]);
 
   const swipeHandlers = useSwipeable({
     onSwipedLeft: () => {
@@ -81,7 +97,7 @@ export function SwipeableChatItem({
           }
         }}
         className={cn(
-          "p-3 rounded-lg transition-all group cursor-pointer relative overflow-hidden",
+          "p-3 rounded-lg transition-all group cursor-pointer relative",
           swipedChatId === conv.id && "transform -translate-x-20",
           editingConvId === conv.id
             ? "bg-muted"
@@ -113,17 +129,7 @@ export function SwipeableChatItem({
                   className="flex-1 px-2 py-1 text-sm font-semibold bg-background border border-[#0A7CFF] rounded focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
                 />
               ) : (
-                <p
-                  className="text-sm font-semibold truncate flex-1 cursor-text"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Don't allow editing if we just swiped
-                    if (!isSwiping) {
-                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
-                    }
-                  }}
-                  title="Click to edit"
-                >
+                <p className="text-sm font-semibold truncate flex-1">
                   {conv.name || 'New Chat'}
                 </p>
               )}
@@ -135,35 +141,73 @@ export function SwipeableChatItem({
             )}
           </div>
 
-          {/* Pin button - Apple Notes style */}
+          {/* 3-dot menu */}
           {editingConvId !== conv.id && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleTogglePinChat(conv.id);
-              }}
-              className={cn(
-                "flex-shrink-0 p-1 rounded transition-all",
-                conv.pinned
-                  ? "opacity-100"
-                  : "opacity-0 group-hover:opacity-100"
-              )}
-              title={conv.pinned ? "Unpin" : "Pin"}
-              aria-label={conv.pinned ? "Unpin chat" : "Pin chat"}
-            >
-              <svg
+            <div className="relative flex-shrink-0" ref={menuRef}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMenu(!showMenu);
+                }}
                 className={cn(
-                  "h-5 w-5 transition-colors",
-                  conv.pinned ? "text-amber-500" : "text-muted-foreground hover:text-foreground"
+                  "p-1.5 rounded-md transition-all",
+                  showMenu
+                    ? "bg-muted opacity-100"
+                    : "opacity-0 group-hover:opacity-100 hover:bg-muted"
                 )}
-                fill={conv.pinned ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth={conv.pinned ? 0 : 1.5}
-                viewBox="0 0 24 24"
+                aria-label="Chat options"
               >
-                <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-              </svg>
-            </button>
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+              </button>
+
+              {/* Dropdown menu */}
+              {showMenu && (
+                <div className="absolute right-0 top-full mt-1 w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Rename
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleTogglePinChat(conv.id);
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" x2="12" y1="17" y2="22"></line>
+                      <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                    </svg>
+                    {conv.pinned ? 'Unpin' : 'Pin'}
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirm({ type: 'chat', id: conv.id, name: conv.name || 'New Chat' });
+                      setShowMenu(false);
+                    }}
+                    className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

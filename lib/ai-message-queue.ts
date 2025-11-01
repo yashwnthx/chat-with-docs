@@ -12,7 +12,7 @@ type MessageQueueCallbacks = {
   onReactionGenerated?: (messageId: string, reaction: Reaction) => void;
 };
 
-export class GeminiMessageQueue {
+export class AIMessageQueue {
   private callbacks: MessageQueueCallbacks;
   private processingQueue: Promise<void> = Promise.resolve();
   private chatId: string | null = null;

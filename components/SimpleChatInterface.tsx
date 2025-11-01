@@ -13,6 +13,7 @@ import { nanoid } from 'nanoid';
 import { Message, Conversation, KnowledgeBase } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { getDeviceId } from '@/lib/device-id';
+import { DocumentIcon } from './icons/AppleIcons';
 
 interface SimpleChatInterfaceProps {
   chatId: string;
@@ -40,6 +41,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingChat, setIsLoadingChat] = useState(false); // Start as false to prevent flash
   const [swipedChatId, setSwipedChatId] = useState<string | null>(null);
+  const [mobileMenuChatId, setMobileMenuChatId] = useState<string | null>(null);
+  const [mobileMenuDocId, setMobileMenuDocId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedInitialData = useRef(false); // Track if we've loaded data to prevent blinking
 
@@ -256,6 +259,74 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       navigator.virtualKeyboard.overlaysContent = true;
     }
   }, []);
+
+  // Close menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mobileMenuChatId) {
+        const target = event.target as HTMLElement;
+        const menuElement = target.closest('[data-menu-id]');
+        if (!menuElement || menuElement.getAttribute('data-menu-id') !== mobileMenuChatId) {
+          setMobileMenuChatId(null);
+        }
+      }
+    };
+
+    if (mobileMenuChatId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [mobileMenuChatId]);
+
+  // Close document menus when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (mobileMenuDocId) {
+        const target = event.target as HTMLElement;
+        const menuElement = target.closest('[data-menu-id]');
+        if (!menuElement || menuElement.getAttribute('data-menu-id') !== mobileMenuDocId) {
+          setMobileMenuDocId(null);
+        }
+      }
+    };
+
+    if (mobileMenuDocId) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [mobileMenuDocId]);
+
+  // Close knowledge panel on desktop when clicking outside (excluding the button that opens it)
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (showKnowledgePanel && !isMobile) {
+        const target = event.target as HTMLElement;
+
+        // Check if click is inside the knowledge panel
+        const isInsidePanel = target.closest('[data-knowledge-panel="true"]');
+
+        // Check if click is on the knowledge button (to allow toggle)
+        const isKnowledgeButton = target.closest('[data-knowledge-button="true"]');
+
+        // Close panel if clicked outside and not on the button
+        if (!isInsidePanel && !isKnowledgeButton) {
+          setShowKnowledgePanel(false);
+        }
+      }
+    };
+
+    if (showKnowledgePanel && !isMobile) {
+      // Use a slight delay to prevent the opening click from immediately closing
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('mousedown', handleClickOutside);
+      }, 150);
+
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showKnowledgePanel, isMobile]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !activeConversationId) return;
@@ -705,13 +776,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 }}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#0A7CFF] text-white hover:bg-[#0A7CFF]/90 transition-colors"
               >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path>
                 </svg>
                 <span>New Chat</span>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+            <div className="flex-1 overflow-y-auto overflow-x-visible p-2">
               {sortedConversations.length === 0 && hasLoadedInitialData.current ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4 animate-in fade-in duration-500">
                   <svg className="h-12 w-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -738,7 +809,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                             }
                           }}
                           className={cn(
-                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group",
+                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group overflow-visible",
                             editingConvId === conv.id
                               ? "bg-muted"
                               : activeConversationId === conv.id
@@ -764,14 +835,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                                     className="flex-1 px-2 py-1 text-sm font-semibold bg-background border border-[#0A7CFF] rounded focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
                                   />
                                 ) : (
-                                  <p
-                                    className="text-sm font-semibold truncate flex-1 cursor-text"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
-                                    }}
-                                    title="Click to edit"
-                                  >
+                                  <p className="text-sm font-semibold truncate flex-1">
                                     {conv.name || 'New Chat'}
                                   </p>
                                 )}
@@ -783,30 +847,79 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                               )}
                             </div>
 
-                            {/* Pin button - Apple Notes style */}
+                            {/* 3-dot menu */}
                             {editingConvId !== conv.id && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTogglePinChat(conv.id);
-                                }}
-                                className="flex-shrink-0 p-1 rounded transition-all"
-                                title={conv.pinned ? "Unpin" : "Pin"}
-                                aria-label={conv.pinned ? "Unpin chat" : "Pin chat"}
-                              >
-                                <svg
-                                  className={cn(
-                                    "h-5 w-5 transition-colors",
-                                    conv.pinned ? "text-amber-500" : "text-muted-foreground"
-                                  )}
-                                  fill={conv.pinned ? "currentColor" : "none"}
-                                  stroke="currentColor"
-                                  strokeWidth={conv.pinned ? 0 : 1.5}
-                                  viewBox="0 0 24 24"
+                              <div className="relative flex-shrink-0" data-menu-id={conv.id}>
+                                <button
+                                  id={`menu-button-${conv.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobileMenuChatId(mobileMenuChatId === conv.id ? null : conv.id);
+                                  }}
+                                  className="p-1.5 rounded-md hover:bg-muted"
+                                  aria-label="Chat options"
                                 >
-                                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                </svg>
-                              </button>
+                                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                  </svg>
+                                </button>
+
+                                {/* Dropdown menu - uses fixed positioning to escape container */}
+                                {mobileMenuChatId === conv.id && (() => {
+                                  const button = document.getElementById(`menu-button-${conv.id}`);
+                                  const rect = button?.getBoundingClientRect();
+                                  return (
+                                    <div
+                                      className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                      style={{
+                                        top: rect ? `${rect.bottom + 4}px` : '0px',
+                                        left: rect ? `${rect.right - 160}px` : '0px',
+                                      }}
+                                    >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditingConversation(conv.id, conv.name || 'New Chat');
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        Rename
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleTogglePinChat(conv.id);
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <line x1="12" x2="12" y1="17" y2="22"></line>
+                                          <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                                        </svg>
+                                        {conv.pinned ? 'Unpin' : 'Pin'}
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteConfirm({ type: 'chat', id: conv.id, name: conv.name || 'New Chat' });
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -832,7 +945,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                             }
                           }}
                           className={cn(
-                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group",
+                            "p-3 rounded-lg mb-1 transition-colors cursor-pointer group overflow-visible",
                             editingConvId === conv.id
                               ? "bg-muted"
                               : activeConversationId === conv.id
@@ -858,14 +971,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                                     className="flex-1 px-2 py-1 text-sm font-semibold bg-background border border-[#0A7CFF] rounded focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
                                   />
                                 ) : (
-                                  <p
-                                    className="text-sm font-semibold truncate flex-1 cursor-text"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartEditingConversation(conv.id, conv.name || 'New Chat');
-                                    }}
-                                    title="Click to edit"
-                                  >
+                                  <p className="text-sm font-semibold truncate flex-1">
                                     {conv.name || 'New Chat'}
                                   </p>
                                 )}
@@ -877,30 +983,79 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                               )}
                             </div>
 
-                            {/* Pin button - Apple Notes style */}
+                            {/* 3-dot menu */}
                             {editingConvId !== conv.id && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleTogglePinChat(conv.id);
-                                }}
-                                className="flex-shrink-0 p-1 rounded transition-all"
-                                title={conv.pinned ? "Unpin" : "Pin"}
-                                aria-label={conv.pinned ? "Unpin chat" : "Pin chat"}
-                              >
-                                <svg
-                                  className={cn(
-                                    "h-5 w-5 transition-colors",
-                                    conv.pinned ? "text-amber-500" : "text-muted-foreground"
-                                  )}
-                                  fill={conv.pinned ? "currentColor" : "none"}
-                                  stroke="currentColor"
-                                  strokeWidth={conv.pinned ? 0 : 1.5}
-                                  viewBox="0 0 24 24"
+                              <div className="relative flex-shrink-0" data-menu-id={conv.id}>
+                                <button
+                                  id={`menu-button-${conv.id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMobileMenuChatId(mobileMenuChatId === conv.id ? null : conv.id);
+                                  }}
+                                  className="p-1.5 rounded-md hover:bg-muted"
+                                  aria-label="Chat options"
                                 >
-                                  <path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
-                                </svg>
-                              </button>
+                                  <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                  </svg>
+                                </button>
+
+                                {/* Dropdown menu - uses fixed positioning to escape container */}
+                                {mobileMenuChatId === conv.id && (() => {
+                                  const button = document.getElementById(`menu-button-${conv.id}`);
+                                  const rect = button?.getBoundingClientRect();
+                                  return (
+                                    <div
+                                      className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                      style={{
+                                        top: rect ? `${rect.bottom + 4}px` : '0px',
+                                        left: rect ? `${rect.right - 160}px` : '0px',
+                                      }}
+                                    >
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleStartEditingConversation(conv.id, conv.name || 'New Chat');
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                        </svg>
+                                        Rename
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleTogglePinChat(conv.id);
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                          <line x1="12" x2="12" y1="17" y2="22"></line>
+                                          <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path>
+                                        </svg>
+                                        {conv.pinned ? 'Unpin' : 'Pin'}
+                                      </button>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteConfirm({ type: 'chat', id: conv.id, name: conv.name || 'New Chat' });
+                                          setMobileMenuChatId(null);
+                                        }}
+                                        className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                                      >
+                                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
+                                        Delete
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+                              </div>
                             )}
                           </div>
                         </div>
@@ -921,8 +1076,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             onClick={handleNewConversation}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#0A7CFF] text-white hover:bg-[#0A7CFF]/90 transition-colors"
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path>
             </svg>
             <span>New Chat</span>
           </button>
@@ -1123,7 +1278,10 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       {/* Knowledge Panel - Desktop (Overlay instead of fixed width) */}
       {showKnowledgePanel && !isMobile && (
         <>
-          <div className="fixed top-16 right-0 bottom-0 w-96 border-l border-border/40 bg-background flex-col flex z-50 shadow-2xl animate-in slide-in-from-right duration-300">
+          <div
+            className="fixed top-16 right-0 bottom-0 w-96 border-l border-border/40 bg-background flex-col flex z-50 shadow-2xl animate-in slide-in-from-right duration-300"
+            data-knowledge-panel="true"
+          >
           <div className="p-4 border-b border-border/40 flex items-center justify-between">
             <h2 className="font-semibold">Knowledge Base</h2>
             <button
@@ -1224,8 +1382,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 </>
               ) : (
                 <>
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4.33496 12.5V7.5C4.33496 7.13273 4.63273 6.83496 5 6.83496C5.36727 6.83496 5.66504 7.13273 5.66504 7.5V12.5C5.66504 14.8942 7.60585 16.835 10 16.835C12.3942 16.835 14.335 14.8942 14.335 12.5V5.83301C14.3348 4.35959 13.1404 3.16522 11.667 3.16504C10.1934 3.16504 8.99822 4.35948 8.99805 5.83301V12.5C8.99805 13.0532 9.44679 13.502 10 13.502C10.5532 13.502 11.002 13.0532 11.002 12.5V7.5C11.002 7.13273 11.2997 6.83496 11.667 6.83496C12.0341 6.83514 12.332 7.13284 12.332 7.5V12.5C12.332 13.7877 11.2877 14.832 10 14.832C8.71226 14.832 7.66797 13.7877 7.66797 12.5V5.83301C7.66814 3.62494 9.45888 1.83496 11.667 1.83496C13.875 1.83514 15.6649 3.62505 15.665 5.83301V12.5C15.665 15.6287 13.1287 18.165 10 18.165C6.87131 18.165 4.33496 15.6287 4.33496 12.5Z"></path>
                   </svg>
                   <span>Upload Document</span>
                 </>
@@ -1236,9 +1394,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {knowledgeBases.filter(kb => kb && kb.id).length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 animate-in fade-in duration-500">
-                <svg className="h-16 w-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+                <img src="/folder-icon.png" alt="Folder" className="h-16 w-16 mb-4 opacity-40" />
                 <p className="text-sm font-medium mb-1">No documents yet</p>
                 <p className="text-xs opacity-70">Upload PDFs, text files, or markdown</p>
               </div>
@@ -1247,16 +1403,16 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 <div
                   key={kb.id}
                   className={cn(
-                    "p-3 rounded-lg border transition-colors group",
+                    "group relative rounded-xl transition-all duration-200",
                     editingDocId === kb.id
-                      ? "border-[#0A7CFF]"
+                      ? "bg-gray-50 dark:bg-white/5"
                       : selectedKnowledge.includes(kb.id)
-                      ? "border-[#0A7CFF] bg-[#0A7CFF]/5"
-                      : "border-border hover:border-[#0A7CFF]/50"
+                      ? "bg-blue-50/30 dark:bg-blue-500/5"
+                      : "hover:bg-gray-50 dark:hover:bg-white/[0.03]"
                   )}
                 >
                   {editingDocId === kb.id ? (
-                    <div className="space-y-2">
+                    <div className="p-3 space-y-2">
                       <input
                         type="text"
                         value={editingDocName}
@@ -1267,9 +1423,9 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                         }}
                         onBlur={handleSaveDocName}
                         autoFocus
-                        className="w-full px-2 py-1 text-sm font-medium bg-background border border-border rounded"
+                        className="w-full px-2 py-1.5 text-sm font-medium bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[10px] text-gray-500 dark:text-gray-400">
                         Press Enter to save, Esc to cancel
                       </p>
                     </div>
@@ -1277,50 +1433,126 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                     <>
                       <div
                         onClick={() => handleToggleKnowledge(kb.id)}
-                        className="flex items-start justify-between cursor-pointer"
+                        className="flex items-center gap-3 p-3 cursor-pointer"
                       >
+                        <svg className="h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
+                        </svg>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{kb.name}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
+                          <p className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
+                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
                             {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
                           </p>
                         </div>
-                        {selectedKnowledge.includes(kb.id) && (
-                          <svg className="h-5 w-5 text-[#0A7CFF] shrink-0 ml-2" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                          </svg>
-                        )}
-                      </div>
-                      {/* Action Buttons - Always visible on mobile, hover on desktop */}
-                      <div className="mt-2 flex gap-2 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStartEditingDoc(kb.id, kb.name);
-                          }}
-                          className="flex-1 text-xs text-foreground hover:text-[#0A7CFF] active:text-[#0A7CFF] hover:bg-[#0A7CFF]/10 active:bg-[#0A7CFF]/10 py-2 rounded-md transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
-                          title="Edit name"
-                          aria-label="Edit document name"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
-                          }}
-                          className="flex-1 text-xs text-destructive hover:text-destructive/80 active:text-destructive/80 hover:bg-destructive/10 active:bg-destructive/10 py-2 rounded-md transition-colors flex items-center justify-center gap-1.5 touch-manipulation"
-                          title="Delete"
-                          aria-label="Delete document"
-                        >
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                          Delete
-                        </button>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {selectedKnowledge.includes(kb.id) && (
+                            <div className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-500">
+                              <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                          {/* 3-dot menu */}
+                          <div className="relative" data-menu-id={kb.id}>
+                            <button
+                              id={`doc-menu-button-${kb.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
+                              }}
+                              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
+                              aria-label="Document options"
+                            >
+                              <svg className="h-4 w-4 text-gray-600 dark:text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                              </svg>
+                            </button>
+
+                            {/* Dropdown menu - uses fixed positioning to escape container */}
+                            {mobileMenuDocId === kb.id && (() => {
+                              const button = document.getElementById(`doc-menu-button-${kb.id}`);
+                              const rect = button?.getBoundingClientRect();
+
+                              // Calculate position intelligently to avoid screen edges
+                              let left = 0;
+                              let top = 0;
+                              const menuWidth = 160; // w-40 = 160px
+                              const menuHeight = 100; // Approximate height of menu with 2 items
+                              const screenWidth = window.innerWidth;
+                              const screenHeight = window.innerHeight;
+                              const margin = 16; // Larger margin from screen edge
+
+                              if (rect) {
+                                // Calculate horizontal position
+                                const spaceOnRight = screenWidth - rect.right;
+                                const spaceOnLeft = rect.left;
+
+                                // If button is close to right edge (less than menu width + margin)
+                                if (spaceOnRight < menuWidth + margin) {
+                                  // Position menu to the left of the button
+                                  const leftAligned = rect.left - menuWidth + rect.width;
+                                  left = Math.max(margin, leftAligned);
+                                }
+                                // If there's not enough space on left either
+                                else if (spaceOnLeft < menuWidth) {
+                                  // Center the menu with margin
+                                  left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.left));
+                                }
+                                else {
+                                  // Normal positioning - align right edge of menu with right edge of button
+                                  left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.right - menuWidth));
+                                }
+
+                                // Calculate vertical position
+                                const spaceBelow = screenHeight - rect.bottom;
+                                if (spaceBelow < menuHeight + margin) {
+                                  // Not enough space below, show above the button
+                                  top = rect.top - menuHeight - 4;
+                                } else {
+                                  // Show below the button
+                                  top = rect.bottom + 4;
+                                }
+                              }
+
+                              return (
+                                <div
+                                  className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                  style={{
+                                    top: `${top}px`,
+                                    left: `${left}px`,
+                                  }}
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartEditingDoc(kb.id, kb.name);
+                                      setMobileMenuDocId(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Rename
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
+                                      setMobileMenuDocId(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Delete
+                                  </button>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
                       </div>
                     </>
                   )}
@@ -1336,10 +1568,10 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       {showKnowledgePanel && isMobile && (
         <>
           <div
-            className="fixed inset-0 bg-black/50 z-50"
+            className="fixed inset-0 bg-black/50 z-[70]"
             onClick={() => setShowKnowledgePanel(false)}
           />
-          <div className="fixed inset-x-0 bottom-0 bg-background rounded-t-2xl z-50 max-h-[80vh] flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
+          <div className="fixed inset-x-0 bottom-0 bg-background rounded-t-2xl z-[70] max-h-[80vh] flex flex-col animate-in slide-in-from-bottom duration-300 shadow-2xl">
             {/* Pull indicator */}
             <div className="pt-2 pb-1 flex justify-center">
               <div className="w-12 h-1 bg-muted-foreground/30 rounded-full" />
@@ -1448,8 +1680,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                   </>
                 ) : (
                   <>
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M4.33496 12.5V7.5C4.33496 7.13273 4.63273 6.83496 5 6.83496C5.36727 6.83496 5.66504 7.13273 5.66504 7.5V12.5C5.66504 14.8942 7.60585 16.835 10 16.835C12.3942 16.835 14.335 14.8942 14.335 12.5V5.83301C14.3348 4.35959 13.1404 3.16522 11.667 3.16504C10.1934 3.16504 8.99822 4.35948 8.99805 5.83301V12.5C8.99805 13.0532 9.44679 13.502 10 13.502C10.5532 13.502 11.002 13.0532 11.002 12.5V7.5C11.002 7.13273 11.2997 6.83496 11.667 6.83496C12.0341 6.83514 12.332 7.13284 12.332 7.5V12.5C12.332 13.7877 11.2877 14.832 10 14.832C8.71226 14.832 7.66797 13.7877 7.66797 12.5V5.83301C7.66814 3.62494 9.45888 1.83496 11.667 1.83496C13.875 1.83514 15.6649 3.62505 15.665 5.83301V12.5C15.665 15.6287 13.1287 18.165 10 18.165C6.87131 18.165 4.33496 15.6287 4.33496 12.5Z"></path>
                     </svg>
                     <span>Upload Document</span>
                   </>
@@ -1460,9 +1692,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {knowledgeBases.filter(kb => kb && kb.id).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 animate-in fade-in duration-500">
-                  <svg className="h-16 w-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+                  <img src="/folder-icon.png" alt="Folder" className="h-16 w-16 mb-4 opacity-40" />
                   <p className="text-sm font-medium mb-1">No documents yet</p>
                   <p className="text-xs opacity-70">Upload PDFs, text files, or markdown</p>
                 </div>
@@ -1470,18 +1700,17 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 knowledgeBases.filter(kb => kb && kb.id).map(kb => (
                   <div
                     key={kb.id}
-                    onClick={() => editingDocId !== kb.id && handleToggleKnowledge(kb.id)}
                     className={cn(
-                      "p-4 rounded-xl border transition-all",
+                      "rounded-xl transition-all duration-200",
                       editingDocId === kb.id
-                        ? "border-[#0A7CFF] bg-[#0A7CFF]/5"
+                        ? "bg-gray-50 dark:bg-white/5"
                         : selectedKnowledge.includes(kb.id)
-                        ? "border-[#0A7CFF] bg-[#0A7CFF]/5 active:scale-95"
-                        : "border-border hover:border-[#0A7CFF]/50 active:scale-95"
+                        ? "bg-blue-50/30 dark:bg-blue-500/5"
+                        : "active:bg-gray-50 dark:active:bg-white/[0.03]"
                     )}
                   >
                     {editingDocId === kb.id ? (
-                      <div className="space-y-3">
+                      <div className="p-4 space-y-3">
                         <input
                           type="text"
                           value={editingDocName}
@@ -1491,7 +1720,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                             if (e.key === 'Escape') handleCancelDocEditing();
                           }}
                           autoFocus
-                          className="w-full px-3 py-2 text-base font-medium bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0A7CFF]"
+                          className="w-full px-3 py-2.5 text-base font-medium bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
                           placeholder="Document name"
                         />
                         <div className="flex gap-2">
@@ -1500,7 +1729,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                               e.stopPropagation();
                               handleSaveDocName();
                             }}
-                            className="flex-1 px-3 py-2 text-sm bg-[#0A7CFF] text-white rounded-lg hover:bg-[#0A7CFF]/90 transition-colors"
+                            className="flex-1 px-4 py-2.5 text-sm font-medium bg-blue-500 text-white rounded-xl active:scale-95 transition-transform"
                           >
                             Save
                           </button>
@@ -1509,7 +1738,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                               e.stopPropagation();
                               handleCancelDocEditing();
                             }}
-                            className="flex-1 px-3 py-2 text-sm bg-muted text-foreground rounded-lg hover:bg-muted/80 transition-colors"
+                            className="flex-1 px-4 py-2.5 text-sm font-medium bg-gray-100 dark:bg-white/10 text-gray-900 dark:text-gray-100 rounded-xl active:scale-95 transition-transform"
                           >
                             Cancel
                           </button>
@@ -1517,44 +1746,128 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <p className="text-base font-medium">{kb.name}</p>
-                            <p className="text-xs text-muted-foreground mt-1">
+                        <div
+                          onClick={() => editingDocId !== kb.id && handleToggleKnowledge(kb.id)}
+                          className="flex items-center gap-3 p-4 cursor-pointer"
+                        >
+                          <svg className="h-5 w-5 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
+                            <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-1">
                               {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
                             </p>
                           </div>
-                          {selectedKnowledge.includes(kb.id) && (
-                            <svg className="h-6 w-6 text-[#0A7CFF] flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleStartEditingDoc(kb.id, kb.name);
-                            }}
-                            className="flex-1 text-sm text-foreground hover:text-[#0A7CFF] active:text-[#0A7CFF] hover:bg-[#0A7CFF]/10 active:bg-[#0A7CFF]/10 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                            </svg>
-                            Edit
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
-                            }}
-                            className="flex-1 text-sm text-destructive hover:text-destructive/80 active:text-destructive/80 hover:bg-destructive/10 active:bg-destructive/10 py-2 rounded-lg transition-colors flex items-center justify-center gap-2"
-                          >
-                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                            Delete
-                          </button>
+                          <div className="flex items-center gap-3 shrink-0">
+                            {selectedKnowledge.includes(kb.id) && (
+                              <div className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-500">
+                                <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                </svg>
+                              </div>
+                            )}
+                            {/* 3-dot menu */}
+                            <div className="relative" data-menu-id={kb.id}>
+                              <button
+                                id={`doc-menu-button-mobile-${kb.id}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
+                                }}
+                                className="p-2 rounded-md hover:bg-muted active:bg-muted"
+                                aria-label="Document options"
+                              >
+                                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                                </svg>
+                              </button>
+
+                              {/* Dropdown menu - uses fixed positioning to escape container */}
+                              {mobileMenuDocId === kb.id && (() => {
+                                const button = document.getElementById(`doc-menu-button-mobile-${kb.id}`);
+                                const rect = button?.getBoundingClientRect();
+
+                                // Calculate position intelligently to avoid screen edges
+                                let left = 0;
+                                let top = 0;
+                                const menuWidth = 160; // w-40 = 160px
+                                const menuHeight = 100; // Approximate height of menu with 2 items
+                                const screenWidth = window.innerWidth;
+                                const screenHeight = window.innerHeight;
+                                const margin = 16; // Larger margin from screen edge
+
+                                if (rect) {
+                                  // Calculate horizontal position
+                                  const spaceOnRight = screenWidth - rect.right;
+                                  const spaceOnLeft = rect.left;
+
+                                  // If button is close to right edge (less than menu width + margin)
+                                  if (spaceOnRight < menuWidth + margin) {
+                                    // Position menu to the left of the button
+                                    const leftAligned = rect.left - menuWidth + rect.width;
+                                    left = Math.max(margin, leftAligned);
+                                  }
+                                  // If there's not enough space on left either
+                                  else if (spaceOnLeft < menuWidth) {
+                                    // Center the menu with margin
+                                    left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.left));
+                                  }
+                                  else {
+                                    // Normal positioning - align right edge of menu with right edge of button
+                                    left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.right - menuWidth));
+                                  }
+
+                                  // Calculate vertical position
+                                  const spaceBelow = screenHeight - rect.bottom;
+                                  if (spaceBelow < menuHeight + margin) {
+                                    // Not enough space below, show above the button
+                                    top = rect.top - menuHeight - 4;
+                                  } else {
+                                    // Show below the button
+                                    top = rect.bottom + 4;
+                                  }
+                                }
+
+                                return (
+                                  <div
+                                    className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                    style={{
+                                      top: `${top}px`,
+                                      left: `${left}px`,
+                                    }}
+                                  >
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStartEditingDoc(kb.id, kb.name);
+                                        setMobileMenuDocId(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                      </svg>
+                                      Rename
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
+                                        setMobileMenuDocId(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                                    >
+                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                      Delete
+                                    </button>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
                         </div>
                       </>
                     )}
