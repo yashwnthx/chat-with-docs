@@ -10,6 +10,16 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
+// Normalize metadata base URL to avoid invalid URL errors when NEXT_PUBLIC_APP_URL
+// is provided without a scheme (e.g. "chat.yashwnthx.dev"). Ensure we always
+// pass a fully-qualified URL to the Metadata API.
+const _rawBase = process.env.NEXT_PUBLIC_APP_URL;
+let _metadataBase = 'https://chat.yashwnthx.dev';
+if (_rawBase) {
+  // If a scheme is missing, assume https
+  _metadataBase = _rawBase.startsWith('http') ? _rawBase : `https://${_rawBase}`;
+}
+
 export const metadata: Metadata = {
   title: {
     default: "Chat with Docs - AI-Powered Document Assistant",
@@ -32,7 +42,7 @@ export const metadata: Metadata = {
   authors: [{ name: "Yashwanth" }],
   creator: "Yashwanth",
   publisher: "yashwnthx.dev",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://chat.yashwnthx.dev'),
+  metadataBase: new URL(_metadataBase),
   openGraph: {
     type: "website",
     locale: "en_US",
