@@ -423,7 +423,7 @@ export const MessageInput = memo(function MessageInput({
     .filter(kb => kb && kb.id && selectedKnowledge.includes(kb.id));
 
   return (
-    <div className="border-t border-border/40 bg-background backdrop-blur-md shadow-lg">
+    <div className="bg-background backdrop-blur-md shadow-lg">
       {/* Selected Knowledge Cards - ChatGPT Style */}
       {selectedKnowledgeBases.length > 0 && (
         <div className="px-4 pt-3">

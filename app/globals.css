@@ -1,5 +1,3 @@
-@import './tiptap.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -231,6 +229,21 @@ html, body {
 /* Global caret styling */
 * {
   caret-color: #0A7CFF;
+}
+
+/* Avoid forcing GPU layers on every element with a transition class.
+   Broad 3D transforms can cause text blur/flicker on mount in some browsers.
+   If you need GPU promotion, add a specific utility (e.g., .gpu-boost) locally. */
+/* .gpu-boost {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+} */
+
+/* Smooth active state transitions */
+.transition-colors {
+  transition-property: color, background-color, border-color;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
 }
 
 /* Hide scrollbar for horizontal scroll areas */

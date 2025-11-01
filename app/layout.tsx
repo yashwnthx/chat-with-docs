@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Inter } from 'next/font/google';
@@ -12,37 +12,49 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: {
-    default: "Chat with Docs",
+    default: "Chat with Docs - AI-Powered Document Assistant",
     template: "%s | Chat with Docs"
   },
-  description: "Intelligent AI chatbot with document knowledge base. Upload PDFs, text files, and markdown to have conversations powered by your documents.",
+  description: "Upload PDFs, text files, and markdown documents. Ask questions and get instant AI-powered answers from your knowledge base. Built with Gemini 2.5 Flash.",
   manifest: "/manifest.json",
-  keywords: ["AI chat", "document chat", "knowledge base", "PDF chat", "AI assistant", "document AI"],
-  authors: [{ name: "Chat with Docs" }],
-  creator: "Chat with Docs",
-  publisher: "Chat with Docs",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'),
+  keywords: [
+    "AI chat",
+    "document chat",
+    "knowledge base",
+    "PDF chat",
+    "AI assistant",
+    "document AI",
+    "Gemini AI",
+    "RAG",
+    "document upload",
+    "PDF analyzer"
+  ],
+  authors: [{ name: "Yashwanth" }],
+  creator: "Yashwanth",
+  publisher: "yashwnthx.dev",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://chat.yashwnthx.dev'),
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "/",
-    title: "Chat with Docs",
-    description: "Intelligent AI chatbot with document knowledge base",
+    title: "Chat with Docs - AI-Powered Document Assistant",
+    description: "Upload documents, ask questions, and get instant AI-powered answers. Built with Gemini 2.5 Flash.",
     siteName: "Chat with Docs",
     images: [
       {
-        url: "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
-        width: 160,
-        height: 160,
-        alt: "Chat with Docs Logo"
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Chat with Docs - AI-Powered Document Assistant"
       }
     ]
   },
   twitter: {
-    card: "summary",
-    title: "Chat with Docs",
-    description: "Intelligent AI chatbot with document knowledge base",
-    images: ["https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png"]
+    card: "summary_large_image",
+    title: "Chat with Docs - AI-Powered Document Assistant",
+    description: "Upload documents, ask questions, get AI-powered answers instantly. Built with Gemini 2.5 Flash.",
+    creator: "@yashwnthx",
+    images: ["/twitter-image"],
   },
   appleWebApp: {
     capable: true,
@@ -59,8 +71,8 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
-    apple: "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png"
+    icon: '/icon',
+    apple: '/apple-icon',
   },
   robots: {
     index: true,

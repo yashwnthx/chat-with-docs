@@ -4,34 +4,6 @@ interface IconProps {
   className?: string;
 }
 
-// Apple macOS Folder Icon
-export const AppleFolderIcon: React.FC<IconProps> = ({ className = "h-5 w-5" }) => (
-  <svg
-    className={className}
-    viewBox="0 0 90 90"
-    xmlns="http://www.w3.org/2000/svg"
-    fill="currentColor"
-  >
-    <path
-      d="M 3.649 80.444 h 82.703 c 2.015 0 3.649 -1.634 3.649 -3.649 v -56.12 c 0 -2.015 -1.634 -3.649 -3.649 -3.649 H 35.525 c -1.909 0 -3.706 -0.903 -4.846 -2.435 l -2.457 -3.301 c -0.812 -1.092 -2.093 -1.735 -3.454 -1.735 H 3.649 C 1.634 9.556 0 11.19 0 13.205 v 63.591 C 0 78.81 1.634 80.444 3.649 80.444 z"
-      fill="#D0D0D3"
-      opacity="0.9"
-    />
-    <path
-      d="M 86.351 80.444 H 3.649 C 1.634 80.444 0 78.81 0 76.795 V 29.11 c 0 -2.015 1.634 -3.649 3.649 -3.649 h 82.703 c 2.015 0 3.649 1.634 3.649 3.649 v 47.685 C 90 78.81 88.366 80.444 86.351 80.444 z"
-      fill="#B8B8BB"
-    />
-    <path
-      d="M 85.106 76.854 H 4.894 c -0.276 0 -0.5 -0.224 -0.5 -0.5 s 0.224 -0.5 0.5 -0.5 h 80.213 c 0.276 0 0.5 0.224 0.5 0.5 S 85.383 76.854 85.106 76.854 z"
-      fill="#D0D0D3"
-    />
-    <path
-      d="M 85.106 72.762 H 4.894 c -0.276 0 -0.5 -0.224 -0.5 -0.5 s 0.224 -0.5 0.5 -0.5 h 80.213 c 0.276 0 0.5 0.224 0.5 0.5 S 85.383 72.762 85.106 72.762 z"
-      fill="#D0D0D3"
-    />
-  </svg>
-);
-
 // Apple macOS Document Icon
 export const AppleDocIcon: React.FC<IconProps> = ({ className = "h-4 w-4" }) => (
   <svg

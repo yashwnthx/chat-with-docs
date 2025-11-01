@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, startTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageInput } from './ChatInput';
 import { MessageList } from './MessageList';
@@ -13,13 +13,13 @@ import { nanoid } from 'nanoid';
 import { Message, Conversation, KnowledgeBase } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { getDeviceId } from '@/lib/device-id';
-import { DocumentIcon } from './icons/AppleIcons';
+import { Drawer, DrawerContent, DrawerTrigger, DrawerClose } from './ui/drawer';
 
-interface SimpleChatInterfaceProps {
+interface ChatInterfaceProps {
   chatId: string;
 }
 
-export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
+export function ChatInterface({ chatId }: ChatInterfaceProps) {
   const router = useRouter();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(chatId);
@@ -40,13 +40,32 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingChat, setIsLoadingChat] = useState(false); // Start as false to prevent flash
+  // Start with true on both server and client to avoid SSR hydration mismatch;
+  // then read saved preference after mount.
+  const [showSidebar, setShowSidebar] = useState(true);
   const [swipedChatId, setSwipedChatId] = useState<string | null>(null);
   const [mobileMenuChatId, setMobileMenuChatId] = useState<string | null>(null);
   const [mobileMenuDocId, setMobileMenuDocId] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedInitialData = useRef(false); // Track if we've loaded data to prevent blinking
+  const lastChatIdRef = useRef<string | null>(chatId);
 
   const { toast } = useToast();
+
+  // Persist sidebar state to localStorage
+  useEffect(() => {
+    localStorage.setItem('sidebar-visible', String(showSidebar));
+  }, [showSidebar]);
+
+  // Read sidebar preference after mount to prevent hydration mismatch
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('sidebar-visible');
+      if (saved !== null) {
+        setShowSidebar(saved === 'true');
+      }
+    } catch {}
+  }, []);
 
   // Get active conversation
   const activeConversation = conversations.find(c => c.id === activeConversationId);
@@ -73,11 +92,6 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
     return preview.length < lastMsg.content.length ? `${preview}...` : preview;
   };
 
-  // Filter messages based on search query
-  const filteredMessages = activeConversation?.messages.filter(msg =>
-    searchQuery.trim() === '' || msg.content.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
-
   // Detect mobile device
   useEffect(() => {
     const checkMobile = () => {
@@ -97,15 +111,18 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
         e.preventDefault();
         handleNewConversation();
       }
-      // Cmd/Ctrl + K for knowledge panel
+      // Cmd/Ctrl + K for search chats
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setShowKnowledgePanel(prev => !prev);
-      }
-      // Cmd/Ctrl + F for search
-      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
-        e.preventDefault();
         setShowSearch(prev => !prev);
+        if (!showSearch) {
+          setSearchQuery('');
+        }
+      }
+      // Cmd/Ctrl + B to toggle sidebar
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault();
+        setShowSidebar(prev => !prev);
       }
       // Escape to close panels and search
       if (e.key === 'Escape') {
@@ -191,15 +208,26 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
     })();
   }, []); // Only run once on mount, no dependencies to avoid re-fetching
 
-  // No more lazy loading - just update active conversation when chatId changes
+  // Update active conversation when chatId changes from URL
   useEffect(() => {
-    setActiveConversationId(chatId);
+    // Synchronize activeConversationId with chatId prop
+    if (chatId !== activeConversationId) {
+      startTransition(() => {
+        setActiveConversationId(chatId);
 
-    // Reset knowledge selection for new chats
-    if (chatId && !conversations.find(c => c.id === chatId)) {
-      setSelectedKnowledge([]);
+        // Reset knowledge selection for new chats
+        if (chatId && !conversations.find(c => c.id === chatId)) {
+          setSelectedKnowledge([]);
+        }
+      });
     }
-  }, [chatId, conversations]);
+  }, [chatId, activeConversationId, conversations]);
+
+  // Track the last chatId to detect a chat switch (used to suppress initial animations)
+  const switchedChat = lastChatIdRef.current !== chatId;
+  useEffect(() => {
+    lastChatIdRef.current = chatId;
+  }, [chatId]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -208,14 +236,19 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       if (scrollElement) {
         // Use requestAnimationFrame for smooth scrolling
         requestAnimationFrame(() => {
-          scrollElement.scrollTo({
-            top: scrollElement.scrollHeight,
-            behavior: 'smooth'
-          });
+          try {
+            scrollElement.scrollTo({
+              top: scrollElement.scrollHeight,
+              behavior: (switchedChat ? 'auto' : 'smooth') as ScrollBehavior,
+            });
+          } catch {
+            // Fallback for older browsers
+            scrollElement.scrollTop = scrollElement.scrollHeight;
+          }
         });
       }
     }
-  }, [activeConversation?.messages.length]);
+  }, [activeConversation?.messages.length, switchedChat]);
 
   // Cleanup invalid knowledge IDs and corrupted data
   useEffect(() => {
@@ -439,8 +472,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             : conv
         ));
 
-        // Update URL without reload
-        router.push(`/chat/${actualChatId}`);
+        // Update URL without reload - use replace to avoid history entry and remounting
+        router.replace(`/chat/${actualChatId}`, { scroll: false });
       }
 
       // Read the streaming response
@@ -583,9 +616,17 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
   };
 
   const handleNewConversation = useCallback(() => {
-    // Create new chat ID and navigate to it
+    // Create new chat ID
     const newChatId = nanoid();
-    router.push(`/chat/${newChatId}`);
+
+    // Instant UI update - user sees immediate feedback
+    setActiveConversationId(newChatId);
+    setSelectedKnowledge([]);
+
+    // Background URL update - use replace for seamless transition
+    startTransition(() => {
+      router.replace(`/chat/${newChatId}`, { scroll: false });
+    });
   }, [router]);
 
   const handleDeleteConversation = useCallback(async (id: string) => {
@@ -747,7 +788,133 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
     setEditingDocName('');
   };
 
+  // Filter conversations based on search query
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return sortedConversations;
+    }
+
+    const query = searchQuery.toLowerCase();
+    return sortedConversations.filter(conv => {
+      // Search in conversation name
+      if (conv.name?.toLowerCase().includes(query)) {
+        return true;
+      }
+
+      // Search in message content
+      return conv.messages.some(msg =>
+        msg.content.toLowerCase().includes(query)
+      );
+    });
+  }, [sortedConversations, searchQuery]);
+
   return (
+    <>
+      {/* Search Modal */}
+      {showSearch && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-[70] animate-in fade-in duration-200"
+            onClick={() => setShowSearch(false)}
+          />
+          <div className="fixed left-1/2 top-[10%] -translate-x-1/2 w-full max-w-2xl mx-4 bg-background rounded-xl shadow-2xl border border-border/40 z-[70] animate-in slide-in-from-top-4 duration-200 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-4">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-muted-foreground flex-shrink-0" aria-hidden="true">
+                <path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path>
+              </svg>
+              <input
+                type="text"
+                placeholder="Search chats..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1 bg-transparent outline-none text-base placeholder:text-muted-foreground/50"
+                autoFocus
+              />
+              <button
+                onClick={() => {
+                  setShowSearch(false);
+                  setSearchQuery('');
+                }}
+                className="p-1.5 hover:bg-muted rounded-full transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
+                aria-label="Close search"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="icon">
+                  <path d="M14.2548 4.75488C14.5282 4.48152 14.9717 4.48152 15.2451 4.75488C15.5184 5.02825 15.5184 5.47175 15.2451 5.74512L10.9902 10L15.2451 14.2549L15.3349 14.3652C15.514 14.6369 15.4841 15.006 15.2451 15.2451C15.006 15.4842 14.6368 15.5141 14.3652 15.335L14.2548 15.2451L9.99995 10.9902L5.74506 15.2451C5.4717 15.5185 5.0282 15.5185 4.75483 15.2451C4.48146 14.9718 4.48146 14.5282 4.75483 14.2549L9.00971 10L4.75483 5.74512L4.66499 5.63477C4.48589 5.3631 4.51575 4.99396 4.75483 4.75488C4.99391 4.51581 5.36305 4.48594 5.63471 4.66504L5.74506 4.75488L9.99995 9.00977L14.2548 4.75488Z"></path>
+                </svg>
+              </button>
+            </div>
+            <hr className="border-border/40" />
+
+            <div className="max-h-[440px] min-h-[440px] overflow-y-auto">
+              {/* Always show New chat option */}
+              <button
+                onClick={() => {
+                  handleNewConversation();
+                  setShowSearch(false);
+                  setSearchQuery('');
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-muted/60 active:bg-muted transition-all duration-150"
+              >
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" className="text-muted-foreground/70 flex-shrink-0">
+                  <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"/>
+                </svg>
+                <div className="flex-1 text-left text-sm font-medium">
+                  New chat
+                </div>
+              </button>
+
+              {filteredConversations.length > 0 && (
+                <>
+                  <div className="my-2">
+                    {/* Today section header */}
+                    <div className="px-4 py-2.5 text-xs font-semibold text-muted-foreground/70">
+                      Chats
+                    </div>
+                    <div className="space-y-1 px-2">
+                      {filteredConversations.map((conv) => (
+                        <button
+                          key={conv.id}
+                          onClick={() => {
+                            // Instant UI update
+                            setActiveConversationId(conv.id);
+                            setShowSearch(false);
+                            setSearchQuery('');
+                            // Background URL update
+                            startTransition(() => {
+                              router.replace(`/chat/${conv.id}`, { scroll: false });
+                            });
+                          }}
+                          className="group relative flex items-center w-full rounded-lg px-3 py-2.5 hover:bg-muted/60 active:bg-muted transition-all duration-150 text-left"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/70 flex-shrink-0">
+                            <path d="M16.835 9.99968C16.8348 6.49038 13.8111 3.58171 10 3.58171C6.18893 3.58171 3.16523 6.49038 3.16504 9.99968C3.16504 11.4535 3.67943 12.7965 4.55273 13.8766C4.67524 14.0281 4.72534 14.2262 4.68945 14.4176C4.59391 14.9254 4.45927 15.4197 4.30469 15.904C4.93198 15.8203 5.5368 15.6959 6.12793 15.528L6.25391 15.5055C6.38088 15.4949 6.5091 15.5208 6.62305 15.5817C7.61731 16.1135 8.76917 16.4186 10 16.4186C13.8112 16.4186 16.835 13.5091 16.835 9.99968ZM18.165 9.99968C18.165 14.3143 14.4731 17.7487 10 17.7487C8.64395 17.7487 7.36288 17.4332 6.23438 16.8757C5.31485 17.118 4.36919 17.2694 3.37402 17.3307C3.14827 17.3446 2.93067 17.2426 2.79688 17.0602C2.66303 16.8778 2.63177 16.6396 2.71289 16.4284L2.91992 15.863C3.08238 15.3953 3.21908 14.9297 3.32227 14.4606C2.38719 13.2019 1.83496 11.6626 1.83496 9.99968C1.83515 5.68525 5.52703 2.25163 10 2.25163C14.473 2.25163 18.1649 5.68525 18.165 9.99968Z"></path>
+                          </svg>
+                          <div className="flex-1 ml-3 overflow-hidden">
+                            <div className="text-sm font-medium truncate group-hover:text-foreground transition-colors">
+                              {conv.name}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {filteredConversations.length === 0 && searchQuery.trim() && (
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <svg width="56" height="56" viewBox="0 0 20 20" fill="currentColor" className="text-muted-foreground/30 mb-4">
+                    <path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path>
+                  </svg>
+                  <div className="text-base font-semibold text-foreground/90 mb-1">No chats found</div>
+                  <div className="text-sm text-muted-foreground/60">Try searching with a different term</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
     <div className="flex h-dvh bg-background overflow-hidden">
       {/* Mobile Sidebar Overlay */}
       {showMobileSidebar && (
@@ -757,7 +924,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             onClick={() => setShowMobileSidebar(false)}
           />
           <div className="fixed inset-y-0 left-0 w-64 bg-background border-r border-border/40 z-50 lg:hidden animate-in slide-in-from-left duration-200">
-            <div className="p-4 border-b border-border/40 flex items-center justify-between">
+            <div className="p-4 flex items-center justify-between">
               <h2 className="font-semibold">Chats</h2>
               <button
                 onClick={() => setShowMobileSidebar(false)}
@@ -768,7 +935,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 </svg>
               </button>
             </div>
-            <div className="p-4 border-b border-border/40">
+            <div className="p-4">
               <button
                 onClick={() => {
                   handleNewConversation();
@@ -785,8 +952,8 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             <div className="flex-1 overflow-y-auto overflow-x-visible p-2">
               {sortedConversations.length === 0 && hasLoadedInitialData.current ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4 animate-in fade-in duration-500">
-                  <svg className="h-12 w-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  <svg width="48" height="48" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="mb-3 opacity-20">
+                    <path d="M16.835 9.99968C16.8348 6.49038 13.8111 3.58171 10 3.58171C6.18893 3.58171 3.16523 6.49038 3.16504 9.99968C3.16504 11.4535 3.67943 12.7965 4.55273 13.8766C4.67524 14.0281 4.72534 14.2262 4.68945 14.4176C4.59391 14.9254 4.45927 15.4197 4.30469 15.904C4.93198 15.8203 5.5368 15.6959 6.12793 15.528L6.25391 15.5055C6.38088 15.4949 6.5091 15.5208 6.62305 15.5817C7.61731 16.1135 8.76917 16.4186 10 16.4186C13.8112 16.4186 16.835 13.5091 16.835 9.99968ZM18.165 9.99968C18.165 14.3143 14.4731 17.7487 10 17.7487C8.64395 17.7487 7.36288 17.4332 6.23438 16.8757C5.31485 17.118 4.36919 17.2694 3.37402 17.3307C3.14827 17.3446 2.93067 17.2426 2.79688 17.0602C2.66303 16.8778 2.63177 16.6396 2.71289 16.4284L2.91992 15.863C3.08238 15.3953 3.21908 14.9297 3.32227 14.4606C2.38719 13.2019 1.83496 11.6626 1.83496 9.99968C1.83515 5.68525 5.52703 2.25163 10 2.25163C14.473 2.25163 18.1649 5.68525 18.165 9.99968Z"></path>
                   </svg>
                   <p className="text-sm font-medium mb-1">No chats yet</p>
                   <p className="text-xs opacity-70">Start a new conversation</p>
@@ -804,8 +971,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                           key={conv.id}
                           onClick={() => {
                             if (editingConvId !== conv.id) {
-                              router.push(`/chat/${conv.id}`);
+                              // Instant UI update
+                              setActiveConversationId(conv.id);
                               setShowMobileSidebar(false);
+                              // Background URL update
+                              startTransition(() => {
+                                router.replace(`/chat/${conv.id}`, { scroll: false });
+                              });
                             }
                           }}
                           className={cn(
@@ -870,7 +1042,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                                   const rect = button?.getBoundingClientRect();
                                   return (
                                     <div
-                                      className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                      className="fixed w-40 bg-background border border-border rounded-lg shadow-lg py-1 z-[110]"
                                       style={{
                                         top: rect ? `${rect.bottom + 4}px` : '0px',
                                         left: rect ? `${rect.right - 160}px` : '0px',
@@ -940,8 +1112,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                           key={conv.id}
                           onClick={() => {
                             if (editingConvId !== conv.id) {
-                              router.push(`/chat/${conv.id}`);
+                              // Instant UI update
+                              setActiveConversationId(conv.id);
                               setShowMobileSidebar(false);
+                              // Background URL update
+                              startTransition(() => {
+                                router.replace(`/chat/${conv.id}`, { scroll: false });
+                              });
                             }
                           }}
                           className={cn(
@@ -1006,7 +1183,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                                   const rect = button?.getBoundingClientRect();
                                   return (
                                     <div
-                                      className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
+                                      className="fixed w-40 bg-background border border-border rounded-lg shadow-lg py-1 z-[110]"
                                       style={{
                                         top: rect ? `${rect.bottom + 4}px` : '0px',
                                         left: rect ? `${rect.right - 160}px` : '0px',
@@ -1070,24 +1247,63 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
       )}
 
       {/* Chat Sidebar - Hidden on mobile, shown on tablet+ */}
-      <div className="w-64 border-r border-border/40 bg-background flex-col hidden lg:flex">
-        <div className="p-4 border-b border-border/40">
-          <button
-            onClick={handleNewConversation}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-[#0A7CFF] text-white hover:bg-[#0A7CFF]/90 transition-colors"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-              <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path>
-            </svg>
-            <span>New Chat</span>
-          </button>
-        </div>
+      {showSidebar && (
+        <div className="w-64 border-r border-border/40 bg-background flex-col hidden lg:flex animate-in slide-in-from-left duration-200">
+          {/* Hide Sidebar Button */}
+          <div className="pt-3 pb-3">
+            <div className="px-3">
+              <button
+                onClick={() => setShowSidebar(false)}
+                className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/60 active:bg-muted transition-all duration-150 text-left"
+                aria-label="Hide sidebar"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0 text-muted-foreground/70">
+                  <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
+                </svg>
+                <div className="flex-1 text-sm font-medium">Hide sidebar</div>
+                <div className="text-xs text-muted-foreground/60 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <kbd className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border/60 bg-muted/40">⌘</kbd>
+                  <kbd className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border/60 bg-muted/40">B</kbd>
+                </div>
+              </button>
+            </div>
+          </div>
 
-        <div className="flex-1 overflow-y-auto p-2">
+          <div className="px-3 py-3 space-y-1.5">
+            {/* Search chats button */}
+            <button
+              onClick={() => setShowSearch(true)}
+              className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/60 active:bg-muted transition-all duration-150 text-left"
+              aria-label="Search chats"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0 text-muted-foreground/70">
+                <path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path>
+              </svg>
+              <div className="flex-1 text-sm font-medium">Search chats</div>
+              <div className="text-xs text-muted-foreground/60 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <kbd className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border/60 bg-muted/40">⌘</kbd>
+                <kbd className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-border/60 bg-muted/40">K</kbd>
+              </div>
+            </button>
+
+            {/* New Chat button */}
+            <button
+              onClick={handleNewConversation}
+              className="w-full flex items-center justify-center gap-2.5 px-3 py-2.5 rounded-lg bg-[#0A7CFF] text-white hover:bg-[#0969E0] active:bg-[#0859C7] transition-all duration-150 font-medium text-sm shadow-sm"
+              aria-label="New chat"
+            >
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path>
+              </svg>
+              <span>New Chat</span>
+            </button>
+          </div>
+
+        <div className="flex-1 overflow-y-auto overflow-x-visible px-2 py-2">
           {sortedConversations.length === 0 && hasLoadedInitialData.current ? (
             <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4 animate-in fade-in duration-500">
-              <svg className="h-12 w-12 mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+              <svg width="48" height="48" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="mb-3 opacity-20">
+                <path d="M16.835 9.99968C16.8348 6.49038 13.8111 3.58171 10 3.58171C6.18893 3.58171 3.16523 6.49038 3.16504 9.99968C3.16504 11.4535 3.67943 12.7965 4.55273 13.8766C4.67524 14.0281 4.72534 14.2262 4.68945 14.4176C4.59391 14.9254 4.45927 15.4197 4.30469 15.904C4.93198 15.8203 5.5368 15.6959 6.12793 15.528L6.25391 15.5055C6.38088 15.4949 6.5091 15.5208 6.62305 15.5817C7.61731 16.1135 8.76917 16.4186 10 16.4186C13.8112 16.4186 16.835 13.5091 16.835 9.99968ZM18.165 9.99968C18.165 14.3143 14.4731 17.7487 10 17.7487C8.64395 17.7487 7.36288 17.4332 6.23438 16.8757C5.31485 17.118 4.36919 17.2694 3.37402 17.3307C3.14827 17.3446 2.93067 17.2426 2.79688 17.0602C2.66303 16.8778 2.63177 16.6396 2.71289 16.4284L2.91992 15.863C3.08238 15.3953 3.21908 14.9297 3.32227 14.4606C2.38719 13.2019 1.83496 11.6626 1.83496 9.99968C1.83515 5.68525 5.52703 2.25163 10 2.25163C14.473 2.25163 18.1649 5.68525 18.165 9.99968Z"></path>
               </svg>
               <p className="text-sm font-medium mb-1">No chats yet</p>
               <p className="text-xs opacity-70">Start a new conversation</p>
@@ -1096,47 +1312,52 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             <>
               {/* Pinned Section */}
               {sortedConversations.some(c => c.pinned) && (
-                <>
-                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                <div className="mb-4">
+                  <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
                     Pinned
                   </div>
-                  {sortedConversations.filter(c => c.pinned).map(conv => (
-                    <SwipeableChatItem
-                      key={conv.id}
-                      conv={conv}
-                      swipedChatId={swipedChatId}
-                      setSwipedChatId={setSwipedChatId}
-                      setDeleteConfirm={setDeleteConfirm}
-                      activeConversationId={activeConversationId}
-                      editingConvId={editingConvId}
-                      editingName={editingName}
-                      setEditingName={setEditingName}
-                      handleSaveConversationName={handleSaveConversationName}
-                      handleCancelEditing={handleCancelEditing}
-                      handleTogglePinChat={handleTogglePinChat}
-                      handleStartEditingConversation={handleStartEditingConversation}
-                      getLastMessagePreview={getLastMessagePreview}
-                    />
-                  ))}
-                </>
+                  <div className="space-y-0.5 mt-1">
+                    {sortedConversations.filter(c => c.pinned).map(conv => (
+                      <SwipeableChatItem
+                        key={conv.id}
+                        conv={conv}
+                        swipedChatId={swipedChatId}
+                        setSwipedChatId={setSwipedChatId}
+                        setDeleteConfirm={setDeleteConfirm}
+                        activeConversationId={activeConversationId}
+                        setActiveConversationId={setActiveConversationId}
+                        editingConvId={editingConvId}
+                        editingName={editingName}
+                        setEditingName={setEditingName}
+                        handleSaveConversationName={handleSaveConversationName}
+                        handleCancelEditing={handleCancelEditing}
+                        handleTogglePinChat={handleTogglePinChat}
+                        handleStartEditingConversation={handleStartEditingConversation}
+                        getLastMessagePreview={getLastMessagePreview}
+                      />
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* Unpinned Section */}
               {sortedConversations.some(c => !c.pinned) && (
-                <>
+                <div>
                   {sortedConversations.some(c => c.pinned) && (
-                    <div className="px-3 py-2 mt-4 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground/60 uppercase tracking-wider">
                       Recent
                     </div>
                   )}
-                  {sortedConversations.filter(c => !c.pinned).map(conv => (
-                    <SwipeableChatItem
-                      key={conv.id}
-                      conv={conv}
+                  <div className="space-y-0.5 mt-1">
+                    {sortedConversations.filter(c => !c.pinned).map(conv => (
+                      <SwipeableChatItem
+                        key={conv.id}
+                        conv={conv}
                       swipedChatId={swipedChatId}
                       setSwipedChatId={setSwipedChatId}
                       setDeleteConfirm={setDeleteConfirm}
                       activeConversationId={activeConversationId}
+                      setActiveConversationId={setActiveConversationId}
                       editingConvId={editingConvId}
                       editingName={editingName}
                       setEditingName={setEditingName}
@@ -1147,59 +1368,77 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                       getLastMessagePreview={getLastMessagePreview}
                     />
                   ))}
-                </>
+                  </div>
+                </div>
               )}
             </>
           )}
         </div>
       </div>
+      )}
+
+      {/* Compact Menu - Shown when sidebar is hidden */}
+      {!showSidebar && (
+        <div className="w-12 border-r border-border/40 bg-background flex-col hidden lg:flex">
+          <div className="flex flex-col items-center py-3">
+            {/* Show Sidebar Button */}
+            <div className="pb-3">
+              <button
+                onClick={() => setShowSidebar(true)}
+                className="p-2.5 hover:bg-muted rounded-lg transition-colors"
+                aria-label="Show sidebar"
+                title="Show sidebar (Ctrl+B)"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/70">
+                  <path d="M6.83496 3.99992C6.38353 4.00411 6.01421 4.0122 5.69824 4.03801C5.31232 4.06954 5.03904 4.12266 4.82227 4.20012L4.62207 4.28606C4.18264 4.50996 3.81498 4.85035 3.55859 5.26848L3.45605 5.45207C3.33013 5.69922 3.25006 6.01354 3.20801 6.52824C3.16533 7.05065 3.16504 7.71885 3.16504 8.66301V11.3271C3.16504 12.2712 3.16533 12.9394 3.20801 13.4618C3.25006 13.9766 3.33013 14.2909 3.45605 14.538L3.55859 14.7216C3.81498 15.1397 4.18266 15.4801 4.62207 15.704L4.82227 15.79C5.03904 15.8674 5.31234 15.9205 5.69824 15.9521C6.01398 15.9779 6.383 15.986 6.83398 15.9902L6.83496 3.99992ZM18.165 11.3271C18.165 12.2493 18.1653 12.9811 18.1172 13.5702C18.0745 14.0924 17.9916 14.5472 17.8125 14.9648L17.7295 15.1415C17.394 15.8 16.8834 16.3511 16.2568 16.7353L15.9814 16.8896C15.5157 17.1268 15.0069 17.2285 14.4102 17.2773C13.821 17.3254 13.0893 17.3251 12.167 17.3251H7.83301C6.91071 17.3251 6.17898 17.3254 5.58984 17.2773C5.06757 17.2346 4.61294 17.1508 4.19531 16.9716L4.01855 16.8896C3.36014 16.5541 2.80898 16.0434 2.4248 15.4169L2.27051 15.1415C2.03328 14.6758 1.93158 14.167 1.88281 13.5702C1.83468 12.9811 1.83496 12.2493 1.83496 11.3271V8.66301C1.83496 7.74072 1.83468 7.00898 1.88281 6.41985C1.93157 5.82309 2.03329 5.31432 2.27051 4.84856L2.4248 4.57317C2.80898 3.94666 3.36012 3.436 4.01855 3.10051L4.19531 3.0175C4.61285 2.83843 5.06771 2.75548 5.58984 2.71281C6.17898 2.66468 6.91071 2.66496 7.83301 2.66496H12.167C13.0893 2.66496 13.821 2.66468 14.4102 2.71281C15.0069 2.76157 15.5157 2.86329 15.9814 3.10051L16.2568 3.25481C16.8833 3.63898 17.394 4.19012 17.7295 4.84856L17.8125 5.02531C17.9916 5.44285 18.0745 5.89771 18.1172 6.41985C18.1653 7.00898 18.165 7.74072 18.165 8.66301V11.3271ZM8.16406 15.995H12.167C13.1112 15.995 13.7794 15.9947 14.3018 15.9521C14.8164 15.91 15.1308 15.8299 15.3779 15.704L15.5615 15.6015C15.9797 15.3451 16.32 14.9774 16.5439 14.538L16.6299 14.3378C16.7074 14.121 16.7605 13.8478 16.792 13.4618C16.8347 12.9394 16.835 12.2712 16.835 11.3271V8.66301C16.835 7.71885 16.8347 7.05065 16.792 6.52824C16.7605 6.14232 16.7073 5.86904 16.6299 5.65227L16.5439 5.45207C16.32 5.01264 15.9796 4.64498 15.5615 4.3886L15.3779 4.28606C15.1308 4.16013 14.8165 4.08006 14.3018 4.03801C13.7794 3.99533 13.1112 3.99504 12.167 3.99504H8.16406C8.16407 3.99667 8.16504 3.99829 8.16504 3.99992L8.16406 15.995Z"></path>
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-col items-center gap-1.5 py-3">
+              {/* Search Button */}
+              <button
+                onClick={() => setShowSearch(true)}
+                className="p-2.5 hover:bg-muted rounded-lg transition-colors"
+                aria-label="Search chats"
+                title="Search chats (Ctrl+K)"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/70">
+                  <path d="M14.0857 8.74999C14.0857 5.80355 11.6972 3.41503 8.75073 3.41503C5.80429 3.41503 3.41577 5.80355 3.41577 8.74999C3.41577 11.6964 5.80429 14.085 8.75073 14.085C11.6972 14.085 14.0857 11.6964 14.0857 8.74999ZM15.4158 8.74999C15.4158 10.3539 14.848 11.8245 13.9041 12.9746L13.9705 13.0303L16.9705 16.0303L17.0564 16.1338C17.2269 16.3919 17.1977 16.7434 16.9705 16.9707C16.7432 17.1975 16.3925 17.226 16.1345 17.0557L16.03 16.9707L13.03 13.9707L12.9753 13.9033C11.8253 14.8472 10.3547 15.415 8.75073 15.415C5.06975 15.415 2.08569 12.431 2.08569 8.74999C2.08569 5.06901 5.06975 2.08495 8.75073 2.08495C12.4317 2.08495 15.4158 5.06901 15.4158 8.74999Z"></path>
+                </svg>
+              </button>
+
+              {/* New Chat Button */}
+              <button
+                onClick={handleNewConversation}
+                className="p-2.5 hover:bg-muted rounded-lg transition-colors"
+                aria-label="New chat"
+                title="New chat"
+              >
+                <svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/70">
+                  <path d="M2.6687 11.333V8.66699C2.6687 7.74455 2.66841 7.01205 2.71655 6.42285C2.76533 5.82612 2.86699 5.31731 3.10425 4.85156L3.25854 4.57617C3.64272 3.94975 4.19392 3.43995 4.85229 3.10449L5.02905 3.02149C5.44666 2.84233 5.90133 2.75849 6.42358 2.71582C7.01272 2.66769 7.74445 2.66797 8.66675 2.66797H9.16675C9.53393 2.66797 9.83165 2.96586 9.83179 3.33301C9.83179 3.70028 9.53402 3.99805 9.16675 3.99805H8.66675C7.7226 3.99805 7.05438 3.99834 6.53198 4.04102C6.14611 4.07254 5.87277 4.12568 5.65601 4.20313L5.45581 4.28906C5.01645 4.51293 4.64872 4.85345 4.39233 5.27149L4.28979 5.45508C4.16388 5.7022 4.08381 6.01663 4.04175 6.53125C3.99906 7.05373 3.99878 7.7226 3.99878 8.66699V11.333C3.99878 12.2774 3.99906 12.9463 4.04175 13.4688C4.08381 13.9833 4.16389 14.2978 4.28979 14.5449L4.39233 14.7285C4.64871 15.1465 5.01648 15.4871 5.45581 15.7109L5.65601 15.7969C5.87276 15.8743 6.14614 15.9265 6.53198 15.958C7.05439 16.0007 7.72256 16.002 8.66675 16.002H11.3337C12.2779 16.002 12.9461 16.0007 13.4685 15.958C13.9829 15.916 14.2976 15.8367 14.5447 15.7109L14.7292 15.6074C15.147 15.3511 15.4879 14.9841 15.7117 14.5449L15.7976 14.3447C15.8751 14.128 15.9272 13.8546 15.9587 13.4688C16.0014 12.9463 16.0017 12.2774 16.0017 11.333V10.833C16.0018 10.466 16.2997 10.1681 16.6667 10.168C17.0339 10.168 17.3316 10.4659 17.3318 10.833V11.333C17.3318 12.2555 17.3331 12.9879 17.2849 13.5771C17.2422 14.0993 17.1584 14.5541 16.9792 14.9717L16.8962 15.1484C16.5609 15.8066 16.0507 16.3571 15.4246 16.7412L15.1492 16.8955C14.6833 17.1329 14.1739 17.2354 13.5769 17.2842C12.9878 17.3323 12.256 17.332 11.3337 17.332H8.66675C7.74446 17.332 7.01271 17.3323 6.42358 17.2842C5.90135 17.2415 5.44665 17.1577 5.02905 16.9785L4.85229 16.8955C4.19396 16.5601 3.64271 16.0502 3.25854 15.4238L3.10425 15.1484C2.86697 14.6827 2.76534 14.1739 2.71655 13.5771C2.66841 12.9879 2.6687 12.2555 2.6687 11.333ZM13.4646 3.11328C14.4201 2.334 15.8288 2.38969 16.7195 3.28027L16.8865 3.46485C17.6141 4.35685 17.6143 5.64423 16.8865 6.53613L16.7195 6.7207L11.6726 11.7686C11.1373 12.3039 10.4624 12.6746 9.72827 12.8408L9.41089 12.8994L7.59351 13.1582C7.38637 13.1877 7.17701 13.1187 7.02905 12.9707C6.88112 12.8227 6.81199 12.6134 6.84155 12.4063L7.10132 10.5898L7.15991 10.2715C7.3262 9.53749 7.69692 8.86241 8.23218 8.32715L13.2791 3.28027L13.4646 3.11328ZM15.7791 4.2207C15.3753 3.81702 14.7366 3.79124 14.3035 4.14453L14.2195 4.2207L9.17261 9.26856C8.81541 9.62578 8.56774 10.0756 8.45679 10.5654L8.41772 10.7773L8.28296 11.7158L9.22241 11.582L9.43433 11.543C9.92426 11.432 10.3749 11.1844 10.7322 10.8271L15.7791 5.78027L15.8552 5.69629C16.185 5.29194 16.1852 4.708 15.8552 4.30371L15.7791 4.2207Z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col h-dvh relative">
         <div className="absolute top-0 left-0 right-0 z-[60]">
           <ChatHeader
-            onShowKnowledge={() => setShowKnowledgePanel(!showKnowledgePanel)}
+            onShowKnowledge={() => setShowKnowledgePanel((prev) => !prev)}
             conversationName={activeConversation?.name}
             onShowMobileSidebar={() => setShowMobileSidebar(!showMobileSidebar)}
-            onShowSearch={() => setShowSearch(!showSearch)}
+            onShowSidebar={() => setShowSidebar(true)}
+            showSidebar={showSidebar}
+            hasMessages={activeConversation && activeConversation.messages.length > 0}
+            onRename={activeConversation ? () => handleStartEditingConversation(activeConversation.id, activeConversation.name || 'New Chat') : undefined}
+            onDelete={activeConversation ? () => setDeleteConfirm({ type: 'chat', id: activeConversation.id, name: activeConversation.name || 'New Chat' }) : undefined}
+            onNewChat={handleNewConversation}
           />
         </div>
-
-        {/* Search Bar - Below header, compact version */}
-        {showSearch && (
-          <div className="absolute top-16 left-0 right-0 z-[55] px-4 py-2">
-            <div className="max-w-2xl mx-auto relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search in messages..."
-                className="w-full bg-background border border-border rounded-lg pl-10 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A7CFF] shadow-lg"
-                autoFocus
-              />
-              <button
-                onClick={() => {
-                  setShowSearch(false);
-                  setSearchQuery('');
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Close search"
-              >
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-              {searchQuery && (
-                <div className="absolute -bottom-6 right-0 text-xs text-muted-foreground">
-                  {filteredMessages.length} result{filteredMessages.length !== 1 ? 's' : ''}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         <ScrollArea
           ref={scrollAreaRef}
@@ -1208,13 +1447,12 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
           withVerticalMargins
           mobileHeaderHeight={isMobileView}
           bottomMargin="calc(var(--dynamic-height, 64px))"
+          disableSmoothScroll={switchedChat}
         >
           <div
             className={cn(
               "min-h-screen flex flex-col",
               isMobileView ? "pt-24" : "pt-16",
-              // Add extra padding when search is active
-              showSearch && "pt-28",
               // Add extra padding when knowledge is selected to prevent overlap
               selectedKnowledge.length > 0
                 ? "pb-40 sm:pb-32"
@@ -1224,32 +1462,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             <div className="flex-1 flex flex-col relative">
               <div className="relative h-full flex">
                 <div className="w-3 bg-background" />
-                {searchQuery ? (
-                  <>
-                    <MessageList
-                      messages={filteredMessages}
-                      isTyping={false}
-                      isMobileView={isMobileView}
-                    />
-                    {filteredMessages.length === 0 && (
-                      <div className="flex-1 flex items-center justify-center text-center text-muted-foreground py-12">
-                        <div>
-                          <svg className="h-12 w-12 mx-auto mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                          </svg>
-                          <p className="text-sm font-medium">No messages found</p>
-                          <p className="text-xs opacity-70 mt-1">Try a different search term</p>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <MessageList
-                    messages={activeConversation?.messages || []}
-                    isTyping={isTyping}
-                    isMobileView={isMobileView}
-                  />
-                )}
+                <MessageList
+                  messages={activeConversation?.messages || []}
+                  isTyping={isTyping}
+                  isMobileView={isMobileView}
+                  // Suppress the first-frame animation right after switching chats
+                  animateLatest={!switchedChat}
+                />
                 <div className="w-3 bg-background" />
               </div>
               <div className="bg-background flex-1" />
@@ -1282,20 +1501,13 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             className="fixed top-16 right-0 bottom-0 w-96 border-l border-border/40 bg-background flex-col flex z-50 shadow-2xl animate-in slide-in-from-right duration-300"
             data-knowledge-panel="true"
           >
-          <div className="p-4 border-b border-border/40 flex items-center justify-between">
+          <div className="p-4 flex items-center justify-between">
             <h2 className="font-semibold">Knowledge Base</h2>
-            <button
-              onClick={() => setShowKnowledgePanel(false)}
-              className="p-2 hover:bg-muted rounded-lg transition-colors"
-              aria-label="Close"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            {/* Close button intentionally removed on desktop; toggle via toolbar icon or click outside */}
+            <div />
           </div>
 
-          <div className="p-4 border-b border-border/40">
+          <div className="p-4">
             <input
               type="file"
               accept=".pdf,.txt,.md"
@@ -1394,7 +1606,9 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
             {knowledgeBases.filter(kb => kb && kb.id).length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 animate-in fade-in duration-500">
-                <img src="/folder-icon.png" alt="Folder" className="h-16 w-16 mb-4 opacity-40" />
+                <svg width="64" height="64" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="mb-4 opacity-20">
+                  <path d="M2.66867 14.1665V8.98677C2.23313 8.72481 1.8817 8.32262 1.69113 7.82075L1.61691 7.59419L1.45578 6.99067C1.12249 5.74681 1.86036 4.46753 3.10422 4.13423L13.9714 1.2231L14.2048 1.17329C15.3713 0.984508 16.5144 1.70556 16.8269 2.87153L16.988 3.47505L17.0388 3.70845C17.2153 4.79724 16.5981 5.86547 15.5671 6.25728L15.3396 6.33149L4.47336 9.24263C4.31482 9.28511 4.15541 9.30996 3.99777 9.3188V14.1665C3.99777 15.1799 4.82027 16.0014 5.83371 16.0014H14.1667C15.1801 16.0013 16.0017 15.1799 16.0017 14.1665V8.33345C16.0017 7.96618 16.2994 7.66841 16.6667 7.66841C17.0339 7.66848 17.3318 7.96622 17.3318 8.33345V14.1665C17.3318 15.9144 15.9146 17.3314 14.1667 17.3315H5.83371C4.08573 17.3315 2.66867 15.9144 2.66867 14.1665ZM11.6667 10.1684L11.8005 10.1821C12.1036 10.2441 12.3318 10.5121 12.3318 10.8334C12.3317 11.1548 12.1035 11.4228 11.8005 11.4848L11.6667 11.4985H8.33371C7.96648 11.4985 7.66873 11.2007 7.66867 10.8334C7.66867 10.4662 7.96644 10.1684 8.33371 10.1684H11.6667ZM15.5417 3.21626C15.4075 2.71539 14.9168 2.40477 14.4157 2.48579L14.3152 2.50727L3.44895 5.41938C2.91466 5.56254 2.59693 6.11166 2.73996 6.64595L2.90207 7.24946L2.93332 7.34712C3.11346 7.82184 3.62765 8.09253 4.12863 7.95845L14.9958 5.04634L15.0935 5.01509C15.5364 4.84669 15.8013 4.3872 15.7253 3.91938L15.7038 3.81977L15.5417 3.21626Z"></path>
+                </svg>
                 <p className="text-sm font-medium mb-1">No documents yet</p>
                 <p className="text-xs opacity-70">Upload PDFs, text files, or markdown</p>
               </div>
@@ -1431,20 +1645,20 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                     </div>
                   ) : (
                     <>
-                      <div
-                        onClick={() => handleToggleKnowledge(kb.id)}
-                        className="flex items-center gap-3 p-3 cursor-pointer"
-                      >
-                        <svg className="h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
-                        </svg>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
-                          <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
-                            {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-3 p-3 relative">
+                        <div
+                          onClick={() => handleToggleKnowledge(kb.id)}
+                          className="flex items-center gap-3 flex-1 cursor-pointer"
+                        >
+                          <svg className="h-4 w-4 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
+                            <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
+                              {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
+                            </p>
+                          </div>
                           {selectedKnowledge.includes(kb.id) && (
                             <div className="flex items-center justify-center h-5 w-5 rounded-full bg-blue-500">
                               <svg className="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1452,106 +1666,56 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                               </svg>
                             </div>
                           )}
-                          {/* 3-dot menu */}
-                          <div className="relative" data-menu-id={kb.id}>
-                            <button
-                              id={`doc-menu-button-${kb.id}`}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
-                              }}
-                              className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 opacity-0 group-hover:opacity-100 transition-all"
-                              aria-label="Document options"
-                            >
-                              <svg className="h-4 w-4 text-gray-600 dark:text-gray-400" fill="currentColor" viewBox="0 0 24 24">
-                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                              </svg>
-                            </button>
+                        </div>
+                        {/* 3-dot menu - outside clickable area */}
+                        <div className="relative shrink-0" data-menu-id={kb.id}>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              console.log('Desktop menu clicked for:', kb.id, kb.name);
+                              setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
+                            }}
+                            className="p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-white/10 transition-opacity"
+                            aria-label="Document options"
+                          >
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-gray-600 dark:text-gray-400">
+                              <path d="M15.498 8.50159C16.3254 8.50159 16.9959 9.17228 16.9961 9.99963C16.9961 10.8271 16.3256 11.4987 15.498 11.4987C14.6705 11.4987 14 10.8271 14 9.99963C14.0002 9.17228 14.6706 8.50159 15.498 8.50159Z"></path>
+                              <path d="M4.49805 8.50159C5.32544 8.50159 5.99689 9.17228 5.99707 9.99963C5.99707 10.8271 5.32555 11.4987 4.49805 11.4987C3.67069 11.4985 3 10.827 3 9.99963C3.00018 9.17239 3.6708 8.50176 4.49805 8.50159Z"></path>
+                              <path d="M10.0003 8.50159C10.8276 8.50176 11.4982 9.17239 11.4984 9.99963C11.4984 10.827 10.8277 11.4985 10.0003 11.4987C9.17283 11.4987 8.50131 10.8271 8.50131 9.99963C8.50149 9.17228 9.17294 8.50159 10.0003 8.50159Z"></path>
+                            </svg>
+                          </button>
 
-                            {/* Dropdown menu - uses fixed positioning to escape container */}
-                            {mobileMenuDocId === kb.id && (() => {
-                              const button = document.getElementById(`doc-menu-button-${kb.id}`);
-                              const rect = button?.getBoundingClientRect();
-
-                              // Calculate position intelligently to avoid screen edges
-                              let left = 0;
-                              let top = 0;
-                              const menuWidth = 160; // w-40 = 160px
-                              const menuHeight = 100; // Approximate height of menu with 2 items
-                              const screenWidth = window.innerWidth;
-                              const screenHeight = window.innerHeight;
-                              const margin = 16; // Larger margin from screen edge
-
-                              if (rect) {
-                                // Calculate horizontal position
-                                const spaceOnRight = screenWidth - rect.right;
-                                const spaceOnLeft = rect.left;
-
-                                // If button is close to right edge (less than menu width + margin)
-                                if (spaceOnRight < menuWidth + margin) {
-                                  // Position menu to the left of the button
-                                  const leftAligned = rect.left - menuWidth + rect.width;
-                                  left = Math.max(margin, leftAligned);
-                                }
-                                // If there's not enough space on left either
-                                else if (spaceOnLeft < menuWidth) {
-                                  // Center the menu with margin
-                                  left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.left));
-                                }
-                                else {
-                                  // Normal positioning - align right edge of menu with right edge of button
-                                  left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.right - menuWidth));
-                                }
-
-                                // Calculate vertical position
-                                const spaceBelow = screenHeight - rect.bottom;
-                                if (spaceBelow < menuHeight + margin) {
-                                  // Not enough space below, show above the button
-                                  top = rect.top - menuHeight - 4;
-                                } else {
-                                  // Show below the button
-                                  top = rect.bottom + 4;
-                                }
-                              }
-
-                              return (
-                                <div
-                                  className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
-                                  style={{
-                                    top: `${top}px`,
-                                    left: `${left}px`,
-                                  }}
-                                >
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartEditingDoc(kb.id, kb.name);
-                                      setMobileMenuDocId(null);
-                                    }}
-                                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
-                                  >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                    </svg>
-                                    Rename
-                                  </button>
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
-                                      setMobileMenuDocId(null);
-                                    }}
-                                    className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
-                                  >
-                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                    </svg>
-                                    Delete
-                                  </button>
-                                </div>
-                              );
-                            })()}
-                          </div>
+                          {/* Dropdown menu */}
+                          {mobileMenuDocId === kb.id && (
+                            <div className="absolute right-0 top-full mt-1 w-40 bg-background border border-border rounded-lg shadow-lg py-1 z-[110]">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEditingDoc(kb.id, kb.name);
+                                  setMobileMenuDocId(null);
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                Rename
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
+                                  setMobileMenuDocId(null);
+                                }}
+                                className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                              >
+                                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                                Delete
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </>
@@ -1560,7 +1724,7 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
               ))
             )}
           </div>
-          </div>
+        </div>
         </>
       )}
 
@@ -1692,7 +1856,9 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {knowledgeBases.filter(kb => kb && kb.id).length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-12 animate-in fade-in duration-500">
-                  <img src="/folder-icon.png" alt="Folder" className="h-16 w-16 mb-4 opacity-40" />
+                  <svg width="64" height="64" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="mb-4 opacity-20">
+                    <path d="M2.66867 14.1665V8.98677C2.23313 8.72481 1.8817 8.32262 1.69113 7.82075L1.61691 7.59419L1.45578 6.99067C1.12249 5.74681 1.86036 4.46753 3.10422 4.13423L13.9714 1.2231L14.2048 1.17329C15.3713 0.984508 16.5144 1.70556 16.8269 2.87153L16.988 3.47505L17.0388 3.70845C17.2153 4.79724 16.5981 5.86547 15.5671 6.25728L15.3396 6.33149L4.47336 9.24263C4.31482 9.28511 4.15541 9.30996 3.99777 9.3188V14.1665C3.99777 15.1799 4.82027 16.0014 5.83371 16.0014H14.1667C15.1801 16.0013 16.0017 15.1799 16.0017 14.1665V8.33345C16.0017 7.96618 16.2994 7.66841 16.6667 7.66841C17.0339 7.66848 17.3318 7.96622 17.3318 8.33345V14.1665C17.3318 15.9144 15.9146 17.3314 14.1667 17.3315H5.83371C4.08573 17.3315 2.66867 15.9144 2.66867 14.1665ZM11.6667 10.1684L11.8005 10.1821C12.1036 10.2441 12.3318 10.5121 12.3318 10.8334C12.3317 11.1548 12.1035 11.4228 11.8005 11.4848L11.6667 11.4985H8.33371C7.96648 11.4985 7.66873 11.2007 7.66867 10.8334C7.66867 10.4662 7.96644 10.1684 8.33371 10.1684H11.6667ZM15.5417 3.21626C15.4075 2.71539 14.9168 2.40477 14.4157 2.48579L14.3152 2.50727L3.44895 5.41938C2.91466 5.56254 2.59693 6.11166 2.73996 6.64595L2.90207 7.24946L2.93332 7.34712C3.11346 7.82184 3.62765 8.09253 4.12863 7.95845L14.9958 5.04634L15.0935 5.01509C15.5364 4.84669 15.8013 4.3872 15.7253 3.91938L15.7038 3.81977L15.5417 3.21626Z"></path>
+                  </svg>
                   <p className="text-sm font-medium mb-1">No documents yet</p>
                   <p className="text-xs opacity-70">Upload PDFs, text files, or markdown</p>
                 </div>
@@ -1746,20 +1912,20 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                       </div>
                     ) : (
                       <>
-                        <div
-                          onClick={() => editingDocId !== kb.id && handleToggleKnowledge(kb.id)}
-                          className="flex items-center gap-3 p-4 cursor-pointer"
-                        >
-                          <svg className="h-5 w-5 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
-                          </svg>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
-                            <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-1">
-                              {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-3 p-4 relative">
+                          <div
+                            onClick={() => editingDocId !== kb.id && handleToggleKnowledge(kb.id)}
+                            className="flex items-center gap-3 flex-1 cursor-pointer"
+                          >
+                            <svg className="h-5 w-5 text-gray-400 dark:text-gray-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
+                            </svg>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[15px] font-medium text-gray-700 dark:text-gray-200 truncate leading-tight">{kb.name}</p>
+                              <p className="text-[13px] text-gray-400 dark:text-gray-500 mt-1">
+                                {kb.uploadedAt ? new Date(kb.uploadedAt).toLocaleDateString() : 'Recently'}
+                              </p>
+                            </div>
                             {selectedKnowledge.includes(kb.id) && (
                               <div className="flex items-center justify-center h-6 w-6 rounded-full bg-blue-500">
                                 <svg className="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1767,106 +1933,80 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                                 </svg>
                               </div>
                             )}
-                            {/* 3-dot menu */}
-                            <div className="relative" data-menu-id={kb.id}>
-                              <button
-                                id={`doc-menu-button-mobile-${kb.id}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
-                                }}
-                                className="p-2 rounded-md hover:bg-muted active:bg-muted"
-                                aria-label="Document options"
-                              >
-                                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                                  <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-                                </svg>
-                              </button>
+                          </div>
+                          {/* 3-dot menu - outside clickable area */}
+                          <div className="relative shrink-0" data-menu-id={kb.id}>
+                            <button
+                              id={`doc-menu-button-${kb.id}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMobileMenuDocId(mobileMenuDocId === kb.id ? null : kb.id);
+                              }}
+                              className="p-2 rounded-md hover:bg-muted active:bg-muted"
+                              aria-label="Document options"
+                            >
+                              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" className="text-muted-foreground/70">
+                                <path d="M15.498 8.50159C16.3254 8.50159 16.9959 9.17228 16.9961 9.99963C16.9961 10.8271 16.3256 11.4987 15.498 11.4987C14.6705 11.4987 14 10.8271 14 9.99963C14.0002 9.17228 14.6706 8.50159 15.498 8.50159Z"></path>
+                                <path d="M4.49805 8.50159C5.32544 8.50159 5.99689 9.17228 5.99707 9.99963C5.99707 10.8271 5.32555 11.4987 4.49805 11.4987C3.67069 11.4985 3 10.827 3 9.99963C3.00018 9.17239 3.6708 8.50176 4.49805 8.50159Z"></path>
+                                <path d="M10.0003 8.50159C10.8276 8.50176 11.4982 9.17239 11.4984 9.99963C11.4984 10.827 10.8277 11.4985 10.0003 11.4987C9.17283 11.4987 8.50131 10.8271 8.50131 9.99963C8.50149 9.17228 9.17294 8.50159 10.0003 8.50159Z"></path>
+                              </svg>
+                            </button>
 
-                              {/* Dropdown menu - uses fixed positioning to escape container */}
-                              {mobileMenuDocId === kb.id && (() => {
-                                const button = document.getElementById(`doc-menu-button-mobile-${kb.id}`);
-                                const rect = button?.getBoundingClientRect();
-
-                                // Calculate position intelligently to avoid screen edges
-                                let left = 0;
-                                let top = 0;
-                                const menuWidth = 160; // w-40 = 160px
-                                const menuHeight = 100; // Approximate height of menu with 2 items
-                                const screenWidth = window.innerWidth;
-                                const screenHeight = window.innerHeight;
-                                const margin = 16; // Larger margin from screen edge
-
-                                if (rect) {
-                                  // Calculate horizontal position
-                                  const spaceOnRight = screenWidth - rect.right;
-                                  const spaceOnLeft = rect.left;
-
-                                  // If button is close to right edge (less than menu width + margin)
-                                  if (spaceOnRight < menuWidth + margin) {
-                                    // Position menu to the left of the button
-                                    const leftAligned = rect.left - menuWidth + rect.width;
-                                    left = Math.max(margin, leftAligned);
-                                  }
-                                  // If there's not enough space on left either
-                                  else if (spaceOnLeft < menuWidth) {
-                                    // Center the menu with margin
-                                    left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.left));
-                                  }
-                                  else {
-                                    // Normal positioning - align right edge of menu with right edge of button
-                                    left = Math.max(margin, Math.min(screenWidth - menuWidth - margin, rect.right - menuWidth));
-                                  }
-
-                                  // Calculate vertical position
-                                  const spaceBelow = screenHeight - rect.bottom;
-                                  if (spaceBelow < menuHeight + margin) {
-                                    // Not enough space below, show above the button
-                                    top = rect.top - menuHeight - 4;
-                                  } else {
-                                    // Show below the button
-                                    top = rect.bottom + 4;
-                                  }
-                                }
-
-                                return (
-                                  <div
-                                    className="fixed w-40 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]"
-                                    style={{
-                                      top: `${top}px`,
-                                      left: `${left}px`,
+                            {mobileMenuDocId === kb.id && (() => {
+                              const button = document.getElementById(`doc-menu-button-${kb.id}`);
+                              const rect = button?.getBoundingClientRect();
+                              const vpH = typeof window !== 'undefined' ? window.innerHeight : 0;
+                              const vpW = typeof window !== 'undefined' ? window.innerWidth : 0;
+                              const menuW = 160; // px
+                              const margin = 8; // px
+                              const estimatedMenuH = 112; // px, 2 items + padding; prevents off-screen on short viewports
+                              const placeAbove = rect ? rect.bottom + estimatedMenuH + margin > vpH : false;
+                              const topPx = rect
+                                ? (placeAbove ? rect.top - 4 : rect.bottom + 4)
+                                : 0;
+                              const leftPx = rect
+                                ? Math.min(
+                                    Math.max(margin, rect.right - menuW),
+                                    Math.max(margin, vpW - menuW - margin)
+                                  )
+                                : margin;
+                              return (
+                                <div
+                                  className={`fixed w-40 bg-background border border-border rounded-lg shadow-lg py-1 z-[110] ${placeAbove ? '-translate-y-full' : ''}`}
+                                  style={{
+                                    top: `${topPx}px`,
+                                    left: `${leftPx}px`,
+                                  }}
+                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleStartEditingDoc(kb.id, kb.name);
+                                      setMobileMenuDocId(null);
                                     }}
+                                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
                                   >
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleStartEditingDoc(kb.id, kb.name);
-                                        setMobileMenuDocId(null);
-                                      }}
-                                      className="w-full px-3 py-2 text-sm text-left hover:bg-muted flex items-center gap-2"
-                                    >
-                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                      </svg>
-                                      Rename
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
-                                        setMobileMenuDocId(null);
-                                      }}
-                                      className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
-                                    >
-                                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                      </svg>
-                                      Delete
-                                    </button>
-                                  </div>
-                                );
-                              })()}
-                            </div>
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                    Rename
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setDeleteConfirm({ type: 'doc', id: kb.id, name: kb.name });
+                                      setMobileMenuDocId(null);
+                                    }}
+                                    className="w-full px-3 py-2 text-sm text-left hover:bg-destructive/10 text-destructive flex items-center gap-2"
+                                  >
+                                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    Delete
+                                  </button>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       </>
@@ -1879,14 +2019,18 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
         </>
       )}
 
-      {/* Confirmation Dialog */}
-      <ConfirmDialog
-        open={deleteConfirm !== null}
-        onOpenChange={(open) => !open && setDeleteConfirm(null)}
-        title={deleteConfirm?.type === 'chat' ? 'Delete Chat?' : 'Delete Document?'}
-        description={`Are you sure you want to delete "${deleteConfirm?.name}"? This action cannot be undone.`}
-        onConfirm={async () => {
-          if (deleteConfirm) {
+    </div>
+
+      {/* Confirmation Dialog - only render when needed to prevent title flicker */}
+      {deleteConfirm && (
+        <ConfirmDialog
+          open={true}
+          onOpenChange={(open) => {
+            if (!open) setDeleteConfirm(null);
+          }}
+          title={deleteConfirm.type === 'chat' ? 'Delete Chat?' : 'Delete Document?'}
+          description={`Are you sure you want to delete "${deleteConfirm.name}"? This action cannot be undone.`}
+          onConfirm={async () => {
             if (deleteConfirm.type === 'chat') {
               handleDeleteConversation(deleteConfirm.id);
             } else {
@@ -1899,30 +2043,22 @@ export function SimpleChatInterface({ chatId }: SimpleChatInterfaceProps) {
                 if (response.ok) {
                   setKnowledgeBases(prev => prev.filter(k => k.id !== deleteConfirm.id));
                   setSelectedKnowledge(prev => prev.filter(id => id !== deleteConfirm.id));
-                  toast({
-                    title: "Document deleted",
-                  });
+                  toast({ title: 'Document deleted' });
                 } else {
-                  toast({
-                    title: "Could not delete document",
-                    variant: "destructive",
-                  });
+                  toast({ title: 'Could not delete document', variant: 'destructive' });
                 }
               } catch (error) {
                 console.error('Error deleting document:', error);
-                toast({
-                  title: "Could not delete document",
-                  variant: "destructive",
-                });
+                toast({ title: 'Could not delete document', variant: 'destructive' });
               }
             }
             setDeleteConfirm(null);
-          }
-        }}
-        confirmText="Delete"
-        variant="destructive"
-      />
-    </div>
+          }}
+          confirmText="Delete"
+          variant="destructive"
+        />
+      )}
+    </>
   );
 }
 

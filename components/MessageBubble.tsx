@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { Message } from "@/types";
 import { useTheme } from "next-themes";
 import { useToast } from "@/hooks/use-toast";
-import { DocumentIcon } from './icons/AppleIcons';
 
 interface MessageBubbleProps {
   message: Message;
@@ -14,6 +13,7 @@ interface MessageBubbleProps {
   justSent?: boolean;
   isMobileView?: boolean;
   isFirstMessage?: boolean; // Add prop to identify first message
+  animate?: boolean; // Only animate when explicitly requested to prevent flicker
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -23,6 +23,7 @@ export const MessageBubble = memo(function MessageBubble({
   justSent,
   isMobileView = false,
   isFirstMessage = false,
+  animate = false,
 }: MessageBubbleProps) {
   const { theme, systemTheme } = useTheme();
   const effectiveTheme = theme === "system" ? systemTheme : theme;
@@ -70,7 +71,10 @@ export const MessageBubble = memo(function MessageBubble({
   `;
 
   return (
-    <div className="flex w-full flex-col relative z-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className={cn(
+      "flex w-full flex-col relative z-10",
+      animate && "animate-in fade-in slide-in-from-bottom-2 duration-300"
+    )}>
       {/* Spacer before messages */}
       <div className="h-1 bg-background" />
 
