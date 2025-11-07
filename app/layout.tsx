@@ -11,65 +11,48 @@ const inter = Inter({
 });
 
 // Normalize metadata base URL to avoid invalid URL errors when NEXT_PUBLIC_APP_URL
-// is provided without a scheme (e.g. "chat.yashwnthx.dev"). Ensure we always
+// is provided without a scheme (e.g. "didisakhi.diu.one"). Ensure we always
 // pass a fully-qualified URL to the Metadata API.
 const _rawBase = process.env.NEXT_PUBLIC_APP_URL;
-let _metadataBase = 'https://chat.yashwnthx.dev';
+let _metadataBase = 'https://didisakhi.diu.one';
 if (_rawBase) {
   // If a scheme is missing, assume https
   _metadataBase = _rawBase.startsWith('http') ? _rawBase : `https://${_rawBase}`;
 }
 
 export const metadata: Metadata = {
-  title: {
-    default: "Chat with Docs - AI-Powered Document Assistant",
-    template: "%s | Chat with Docs"
-  },
-  description: "Upload PDFs, text files, and markdown documents. Ask questions and get instant AI-powered answers from your knowledge base. Built with Gemini 2.5 Flash.",
+  title: "Didi Sakhi",
+  description: "imessage-inspired ai-powered website that allows you to chat with documents",
   manifest: "/manifest.json",
-  keywords: [
-    "AI chat",
-    "document chat",
-    "knowledge base",
-    "PDF chat",
-    "AI assistant",
-    "document AI",
-    "Gemini AI",
-    "RAG",
-    "document upload",
-    "PDF analyzer"
-  ],
-  authors: [{ name: "Yashwanth" }],
-  creator: "Yashwanth",
-  publisher: "yashwnthx.dev",
+  publisher: "diu.one",
   metadataBase: new URL(_metadataBase),
   openGraph: {
     type: "website",
     locale: "en_US",
     url: "/",
-    title: "Chat with Docs - AI-Powered Document Assistant",
-    description: "Upload documents, ask questions, and get instant AI-powered answers. Built with Gemini 2.5 Flash.",
-    siteName: "Chat with Docs",
+    title: "Didi Sakhi",
+    description: "imessage-inspired ai-powered website that allows you to chat with documents",
+    siteName: "Didi Sakhi",
     images: [
       {
         url: "/opengraph-image",
         width: 1200,
         height: 630,
-        alt: "Chat with Docs - AI-Powered Document Assistant"
+        alt: "Didi Sakhi"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "Chat with Docs - AI-Powered Document Assistant",
-    description: "Upload documents, ask questions, get AI-powered answers instantly. Built with Gemini 2.5 Flash.",
+    title: "Didi Sakhi",
+    description: "imessage-inspired ai-powered website that allows you to chat with documents",
     creator: "@yashwnthx",
     images: ["/twitter-image"],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Chat with Docs",
+    title: "Didi Sakhi",
     startupImage: [
       {
         url: "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",

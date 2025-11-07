@@ -1,11 +1,11 @@
 {
-  "name": "Chat with Docs",
-  "short_name": "Chat Docs",
-  "description": "AI-powered document chat application with knowledge base management",
+  "name": "Didi Sakhi",
+  "short_name": "Didi Sakhi",
+  "description": "imessage-inspired ai-powered website that allows you to chat with documents",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#0A7CFF",
+  "theme_color": "#67FF81",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -15,8 +15,7 @@
       "purpose": "any maskable"
     }
   ],
-  "screenshots": [],
-  "categories": ["productivity", "utilities"],
+  "categories": ["productivity"],
   "shortcuts": [
     {
       "name": "New Chat",
@@ -27,4 +26,3 @@
     }
   ]
 }
-
