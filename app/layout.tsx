@@ -46,7 +46,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Didi Sakhi",
     description: "imessage-inspired ai-powered website that allows you to chat with documents",
-    creator: "@yashwnthx",
     images: ["/twitter-image"],
   },
   appleWebApp: {

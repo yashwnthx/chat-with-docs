@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "imessage-inspired ai-powered website that allows you to chat with documents",
-  "author": "Yashwanth",
   "license": "MIT",
   "scripts": {
     "dev": "next dev",

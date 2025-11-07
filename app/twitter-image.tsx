@@ -48,10 +48,19 @@ export default async function Image() {
               background: 'rgba(255, 255, 255, 0.2)',
               backdropFilter: 'blur(10px)',
               marginBottom: '30px',
-              fontSize: '56px',
             }}
           >
-            💬
+            <svg
+              width="70"
+              height="70"
+              viewBox="0 0 100 100"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M43.5,75.7c2.1,0.3,4.2,0.5,6.4,0.5c18.2,0,33-12.3,33-27.4S68.2,21.5,50,21.5c-18.2,0-33,12.3-33,27.4c0,9.9,6.3,18.5,15.7,23.3c0,0.3,0,0.6,0,1c0,2.9-4.8,6.7-4.5,6.7c4.8,0,8.2-3,10.5-3.7C40.6,75.7,41.7,75.6,43.5,75.7z"
+                fill="white"
+              />
+            </svg>
           </div>
 
           {/* Title */}
