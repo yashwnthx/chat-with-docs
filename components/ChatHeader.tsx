@@ -2,6 +2,8 @@
 
 import { memo, useState, useRef, useEffect } from 'react';
 
+export type Language = 'english' | 'hindi';
+
 interface ChatHeaderProps {
   conversationName?: string;
   onShowMobileSidebar?: () => void;
@@ -11,11 +13,15 @@ interface ChatHeaderProps {
   onRename?: () => void;
   onDelete?: () => void;
   onNewChat?: () => void;
+  language?: Language;
+  onLanguageChange?: (lang: Language) => void;
 }
 
-export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMobileSidebar, onShowSidebar, showSidebar, hasMessages, onRename, onDelete, onNewChat }: ChatHeaderProps) {
+export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMobileSidebar, onShowSidebar, showSidebar, hasMessages, onRename, onDelete, onNewChat, language = 'english', onLanguageChange }: ChatHeaderProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const langMenuRef = useRef<HTMLDivElement>(null);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -23,13 +29,16 @@ export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMob
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setShowLangMenu(false);
+      }
     };
 
-    if (showMenu) {
+    if (showMenu || showLangMenu) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [showMenu]);
+  }, [showMenu, showLangMenu]);
 
   return (
     <div className="flex items-center justify-between px-4 h-16 bg-background/50 backdrop-blur-md">
@@ -55,6 +64,69 @@ export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMob
         </h1>
       </div>
       <div className="flex items-center justify-end flex-1 gap-2">
+        {/* Language Selector */}
+        {onLanguageChange && (
+          <div className="relative" ref={langMenuRef}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowLangMenu(!showLangMenu);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium hover:bg-muted rounded-lg transition-colors border border-border/50"
+              aria-label="Select language"
+              title="Select language"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+              <span className="hidden sm:inline">{language === 'hindi' ? 'हिंदी' : 'EN'}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                <path d="M6 9l6 6 6-6"></path>
+              </svg>
+            </button>
+
+            {/* Language dropdown */}
+            {showLangMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-36 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLanguageChange('english');
+                    setShowLangMenu(false);
+                  }}
+                  className={`w-full px-3 py-2 text-sm text-left hover:bg-muted/60 active:bg-muted flex items-center gap-2 transition-colors duration-150 ${language === 'english' ? 'bg-muted/40' : ''}`}
+                >
+                  <span className="w-5 text-center font-medium">EN</span>
+                  <span>English</span>
+                  {language === 'english' && (
+                    <svg className="ml-auto h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onLanguageChange('hindi');
+                    setShowLangMenu(false);
+                  }}
+                  className={`w-full px-3 py-2 text-sm text-left hover:bg-muted/60 active:bg-muted flex items-center gap-2 transition-colors duration-150 ${language === 'hindi' ? 'bg-muted/40' : ''}`}
+                >
+                  <span className="w-5 text-center font-medium">हि</span>
+                  <span>हिंदी</span>
+                  {language === 'hindi' && (
+                    <svg className="ml-auto h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Mobile: show New Chat button instead of 3-dot menu */}
         {onNewChat && hasMessages && (
           <button

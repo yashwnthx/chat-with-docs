@@ -176,14 +176,24 @@ export const MessageBubble = memo(function MessageBubble({
             ) : (
               <div className="flex flex-col">
                 {(() => {
-                  // Extract sources from <<SOURCE: doc name>> tags in content
-                  const sourceRegex = /<<SOURCE:\s*([^>]+)>>/g;
-                  const extractedSources: string[] = [];
+                  // Extract sources from <<SOURCE: doc name | Page X>> or <<SOURCE: doc name>> tags
+                  const sourceRegex = /<<SOURCE:\s*([^|>]+?)(?:\s*\|\s*([^>]+))?>>/g;
+                  const extractedSources: Array<{ name: string; pages: string }> = [];
                   let match;
                   while ((match = sourceRegex.exec(message.content)) !== null) {
                     const sourceName = match[1].trim();
-                    if (sourceName && !extractedSources.includes(sourceName)) {
-                      extractedSources.push(sourceName);
+                    const pages = match[2]?.trim() || '';
+                    if (sourceName) {
+                      // Check if source already exists
+                      const existing = extractedSources.find(s => s.name === sourceName);
+                      if (existing) {
+                        // Merge pages
+                        if (pages && !existing.pages.includes(pages)) {
+                          existing.pages = existing.pages ? `${existing.pages}, ${pages}` : pages;
+                        }
+                      } else {
+                        extractedSources.push({ name: sourceName, pages });
+                      }
                     }
                   }
 
@@ -217,17 +227,55 @@ export const MessageBubble = memo(function MessageBubble({
                         )}
                       </div>
 
-                      {/* Sources Section - Show extracted sources for bot messages */}
+                      {/* Sources - clean iMessage style */}
                       {!isMe && extractedSources.length > 0 && (
-                        <div className="mt-3 pt-2 border-t border-gray-200/50 dark:border-gray-700/50">
-                          <div className="flex items-center gap-1.5 text-[11px] text-gray-500 dark:text-gray-400">
-                            <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" clipRule="evenodd" d="M11.2598 2.25191C11.8396 2.25191 12.2381 2.24808 12.6201 2.33981L12.8594 2.40719C13.0957 2.48399 13.3228 2.5886 13.5352 2.71871L13.6582 2.79879C13.9416 2.99641 14.1998 3.25938 14.5586 3.61813L15.5488 4.60836L15.833 4.89449C16.0955 5.16136 16.2943 5.38072 16.4482 5.6318L16.5703 5.84957C16.6829 6.07074 16.7691 6.30495 16.8271 6.54684L16.8574 6.69137C16.918 7.0314 16.915 7.39998 16.915 7.90719V13.0839C16.915 13.7728 16.9157 14.3301 16.8789 14.7802C16.8461 15.1808 16.781 15.5417 16.6367 15.8779L16.5703 16.0205C16.3049 16.5413 15.9008 16.9772 15.4053 17.2812L15.1865 17.4033C14.8099 17.5951 14.4041 17.6745 13.9463 17.7119C13.4961 17.7487 12.9391 17.749 12.25 17.749H7.75C7.06092 17.749 6.50395 17.7487 6.05371 17.7119C5.65317 17.6791 5.29227 17.6148 4.95606 17.4707L4.81348 17.4033C4.29235 17.1378 3.85586 16.7341 3.55176 16.2382L3.42969 16.0205C3.23787 15.6439 3.15854 15.2379 3.12109 14.7802C3.08432 14.3301 3.08496 13.7728 3.08496 13.0839V6.91695C3.08496 6.228 3.08433 5.67086 3.12109 5.22066C3.1585 4.76296 3.23797 4.35698 3.42969 3.98043C3.73311 3.38494 4.218 2.90008 4.81348 2.59664C5.19009 2.40484 5.59593 2.32546 6.05371 2.28805C6.50395 2.25126 7.06091 2.25191 7.75 2.25191H11.2598ZM7.75 3.58199C7.03896 3.58199 6.54563 3.58288 6.16211 3.61422C5.78642 3.64492 5.575 3.70168 5.41699 3.78219C5.0718 3.95811 4.79114 4.23874 4.61524 4.58395C4.53479 4.74193 4.47795 4.95354 4.44727 5.32906C4.41595 5.71254 4.41504 6.20609 4.41504 6.91695V13.0839C4.41504 13.7947 4.41594 14.2884 4.44727 14.6718C4.47798 15.0472 4.53477 15.259 4.61524 15.417L4.68555 15.5429C4.86186 15.8304 5.11487 16.0648 5.41699 16.2187L5.54688 16.2744C5.69065 16.3258 5.88016 16.3636 6.16211 16.3867C6.54563 16.418 7.03898 16.4189 7.75 16.4189H12.25C12.961 16.4189 13.4544 16.418 13.8379 16.3867C14.2135 16.356 14.425 16.2992 14.583 16.2187L14.709 16.1474C14.9963 15.9712 15.2308 15.7189 15.3848 15.417L15.4414 15.2861C15.4927 15.1425 15.5297 14.953 15.5527 14.6718C15.5841 14.2884 15.585 13.7947 15.585 13.0839V8.55758L13.3506 8.30953C12.2572 8.18804 11.3976 7.31827 11.2881 6.22359L11.0234 3.58199H7.75ZM12.6113 6.09176C12.6584 6.56193 13.0275 6.93498 13.4971 6.98727L15.5762 7.21871C15.5727 7.13752 15.5686 7.07109 15.5615 7.01266L15.5342 6.85738C15.5005 6.7171 15.4501 6.58135 15.3848 6.45309L15.3145 6.32711C15.2625 6.24233 15.1995 6.16135 15.0928 6.04488L14.6084 5.54879L13.6182 4.55856C13.2769 4.21733 13.1049 4.04904 12.9688 3.94234L12.8398 3.8525C12.7167 3.77705 12.5853 3.71637 12.4482 3.67184L12.3672 3.6484L12.6113 6.09176Z"></path>
+                        <div className="mt-3 pt-2.5 border-t border-gray-200/50 dark:border-gray-600/30">
+                          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-1.5">
+                            <svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M4.33496 12.5V7.5C4.33496 7.13273 4.63273 6.83496 5 6.83496C5.36727 6.83496 5.66504 7.13273 5.66504 7.5V12.5C5.66504 14.8942 7.60585 16.835 10 16.835C12.3942 16.835 14.335 14.8942 14.335 12.5V5.83301C14.3348 4.35959 13.1404 3.16522 11.667 3.16504C10.1934 3.16504 8.99822 4.35948 8.99805 5.83301V12.5C8.99805 13.0532 9.44679 13.502 10 13.502C10.5532 13.502 11.002 13.0532 11.002 12.5V7.5C11.002 7.13273 11.2997 6.83496 11.667 6.83496C12.0341 6.83514 12.332 7.13284 12.332 7.5V12.5C12.332 13.7877 11.2877 14.832 10 14.832C8.71226 14.832 7.66797 13.7877 7.66797 12.5V5.83301C7.66814 3.62494 9.45888 1.83496 11.667 1.83496C13.875 1.83514 15.6649 3.62505 15.665 5.83301V12.5C15.665 15.6287 13.1287 18.165 10 18.165C6.87131 18.165 4.33496 15.6287 4.33496 12.5Z"/>
                             </svg>
-                            <span className="font-medium">Source:</span>
-                            <span className="text-gray-600 dark:text-gray-300">
-                              {extractedSources.join(', ')}
-                            </span>
+                            References
+                          </div>
+                          <div className="space-y-1">
+                            {extractedSources.map((source, index) => {
+                              // Clean up document name - keep it readable
+                              const cleanName = source.name
+                                .replace(/^\[.*?\]\s*/, '')
+                                .replace(/\s*\(\d+\s*pages?\)$/i, '')
+                                .replace(/\.pdf$/i, '')
+                                .replace(/^(PRI|PRIs|CVs)\s*(Modual|Module)\s*\d*\s*/i, '')
+                                .replace(/_/g, ' ')
+                                .trim();
+
+                              // Format page numbers clearly
+                              let pageDisplay = '';
+                              if (source.pages) {
+                                const cleaned = source.pages
+                                  .replace(/Pages?\s*/gi, '')
+                                  .replace(/Chapter\s*/gi, 'Ch. ')
+                                  .trim();
+                                if (cleaned) {
+                                  // Check if it's multiple pages
+                                  const hasMultiple = cleaned.includes(',') || cleaned.includes('-');
+                                  pageDisplay = hasMultiple ? `Pages ${cleaned}` : `Page ${cleaned}`;
+                                }
+                              }
+
+                              return (
+                                <div
+                                  key={index}
+                                  className="flex items-start gap-1.5 text-[11px]"
+                                >
+                                  <span className="text-gray-400 dark:text-gray-500 flex-shrink-0">{index + 1}.</span>
+                                  <span className="text-gray-700 dark:text-gray-200 font-medium">{cleanName}</span>
+                                  {pageDisplay && (
+                                    <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                      — {pageDisplay}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}

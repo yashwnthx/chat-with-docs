@@ -9,25 +9,62 @@ export const SYSTEM_DEVICE_ID = 'system-training';
 let trainingInitiated = false;
 let trainingPromise: Promise<void> | null = null;
 
-// Helper to extract text from PDF
-async function extractPdfText(buffer: Buffer, fileName: string): Promise<{ content: string; hasImages: boolean }> {
+// Helper to extract text from PDF with page markers
+async function extractPdfText(buffer: Buffer, fileName: string): Promise<{ content: string; hasImages: boolean; totalPages: number }> {
   try {
     const pdfParse = (await import('pdf-parse-fork')).default;
-    const pdfData = await pdfParse(buffer);
+
+    // Custom page renderer to add page markers
+    const options = {
+      pagerender: async function(pageData: any) {
+        const textContent = await pageData.getTextContent();
+        const text = textContent.items.map((item: any) => item.str).join(' ');
+        return text;
+      }
+    };
+
+    const pdfData = await pdfParse(buffer, options);
+    const totalPages = pdfData.numpages || 1;
+
+    // Split content by form feed (page break) or estimate pages
+    const rawText = pdfData.text;
+    const pageBreaks = rawText.split(/\f/);
+
+    let contentWithPageMarkers = '';
+    if (pageBreaks.length > 1) {
+      // PDF has page breaks
+      pageBreaks.forEach((pageText, index) => {
+        if (pageText.trim()) {
+          contentWithPageMarkers += `[PAGE ${index + 1}] ${pageText.trim()}\n\n`;
+        }
+      });
+    } else {
+      // No page breaks, estimate based on character count
+      const charsPerPage = Math.ceil(rawText.length / totalPages);
+      for (let i = 0; i < totalPages; i++) {
+        const start = i * charsPerPage;
+        const end = Math.min((i + 1) * charsPerPage, rawText.length);
+        const pageText = rawText.substring(start, end).trim();
+        if (pageText) {
+          contentWithPageMarkers += `[PAGE ${i + 1}] ${pageText}\n\n`;
+        }
+      }
+    }
+
     return {
-      content: pdfData.text,
+      content: contentWithPageMarkers || rawText,
       hasImages: pdfData.numpages > 0,
+      totalPages,
     };
   } catch (error) {
     console.error(`Error extracting PDF text from ${fileName}:`, error);
     return {
       content: `PDF Document: ${fileName} - Text extraction failed`,
       hasImages: true,
+      totalPages: 0,
     };
   }
-}
-
-// Helper to get file type
+}// Helper to get file type
 function getFileType(fileName: string): string {
   const ext = fileName.toLowerCase().split('.').pop();
   switch (ext) {
@@ -97,11 +134,13 @@ async function trainDocument(filePath: string, fileName: string, category: strin
 
     let content = '';
     let hasImages = false;
+    let totalPages = 1;
 
     if (fileType === 'application/pdf') {
       const pdfResult = await extractPdfText(buffer, fileName);
       content = pdfResult.content;
       hasImages = pdfResult.hasImages;
+      totalPages = pdfResult.totalPages;
     } else {
       content = buffer.toString('utf-8');
     }
@@ -110,19 +149,26 @@ async function trainDocument(filePath: string, fileName: string, category: strin
     const wordCount = content.split(/\s+/).length;
     const documentCount = Math.max(1, Math.ceil(wordCount / 500));
 
-    // Create name with category prefix
-    const displayName = category ? `[${category}] ${fileName}` : fileName;
+    // Create name with category prefix and page count
+    const displayName = category
+      ? `[${category}] ${fileName}`
+      : fileName;
+
+    // Add page count to the name for display
+    const nameWithPages = totalPages > 1
+      ? `${displayName} (${totalPages} pages)`
+      : displayName;
 
     // Save to database
     await db.knowledge.create({
       data: {
-        name: displayName,
+        name: nameWithPages,
         content: content.substring(0, 50000),
         originalFilename: fileName,
         filePath: filePath,
         fileType: fileType,
         fileSize: fileSize,
-        documentCount,
+        documentCount: totalPages > 0 ? totalPages : documentCount,
         hasImages,
         deviceId: SYSTEM_DEVICE_ID,
       } as any,

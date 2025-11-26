@@ -150,7 +150,7 @@ async function handleImageGeneration(userPrompt: string, messages: any[], chatId
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { messages, chatId, deviceId } = body;
+    const { messages, chatId, deviceId, language = 'english' } = body;
 
     // Validate deviceId
     if (!deviceId) {
@@ -183,10 +183,17 @@ export async function POST(req: Request) {
     // Always use gemini-2.5-flash for all text and document queries
     const model = 'gemini-2.5-flash';
 
+    // Language instructions
+    const languageInstruction = language === 'hindi'
+      ? `IMPORTANT: You MUST respond ONLY in Hindi (हिंदी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Hindi equivalent.`
+      : `IMPORTANT: You MUST respond ONLY in English. Do not use Hindi or any other language.`;
+
     // Get knowledge base context - load system-trained documents
     let systemPrompt = `You are Didi Sakhi, a helpful AI assistant specialized in village development, Panchayati Raj, and rural governance in India.
 
 You have been trained on official government documents and modules. Answer questions based on this knowledge.
+
+${languageInstruction}
 
 Format your responses clearly:
 - Use numbered lists for steps or multiple points
@@ -214,9 +221,11 @@ Format your responses clearly:
 
       systemPrompt = `You are Didi Sakhi, a helpful AI assistant specialized in village development, Panchayati Raj, and rural governance in India.
 
-You have been trained on these official government documents:
+You have been trained on these official government documents. Each document has [PAGE X] markers to help you identify page numbers:
 
 ${knowledgeContext}
+
+${languageInstruction}
 
 IMPORTANT INSTRUCTIONS:
 1. Answer questions based ONLY on the information in these documents
@@ -225,9 +234,12 @@ IMPORTANT INSTRUCTIONS:
    - Use bullet points for related items
    - Use **bold** for key terms and important concepts
    - Keep paragraphs concise
-3. At the VERY END of your response, on a new line, output ONLY the document name(s) you referenced in this exact format: <<SOURCE: Document Name Here>>
-   - Use the exact document name as provided above
-   - If multiple documents were used, list them as: <<SOURCE: Doc1>> <<SOURCE: Doc2>>
+3. At the VERY END of your response, on a new line, cite your sources in this EXACT format:
+   <<SOURCE: Document Name | Page X>>
+   Or for multiple pages: <<SOURCE: Document Name | Pages X, Y, Z>>
+   Or for multiple documents: <<SOURCE: Doc1 | Page X>> <<SOURCE: Doc2 | Pages Y, Z>>
+   - Include the ACTUAL page number(s) where you found the information
+   - Look for [PAGE X] markers in the document content to find page numbers
    - Do NOT mention sources anywhere else in your response
 4. If the question is not covered in the documents, politely say so and do not include a SOURCE tag
 

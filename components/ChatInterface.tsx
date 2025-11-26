@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, startTransition } fr
 import { useRouter } from 'next/navigation';
 import { MessageInput } from './ChatInput';
 import { MessageList } from './MessageList';
-import { ChatHeader } from './ChatHeader';
+import { ChatHeader, Language } from './ChatHeader';
 import { ScrollArea } from './ui/scroll-area';
 import { ConfirmDialog } from './ConfirmDialog';
 import { SwipeableChatItem } from './SwipeableChatItem';
@@ -46,6 +46,7 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
   const [swipedChatId, setSwipedChatId] = useState<string | null>(null);
   const [mobileMenuChatId, setMobileMenuChatId] = useState<string | null>(null);
   const [mobileMenuDocId, setMobileMenuDocId] = useState<string | null>(null);
+  const [language, setLanguage] = useState<Language>('english');
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const hasLoadedInitialData = useRef(false); // Track if we've loaded data to prevent blinking
   const lastChatIdRef = useRef<string | null>(chatId);
@@ -439,6 +440,7 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
           chatId: activeConversationId, // Pass the chatId
           knowledgeIds: validKnowledgeIds,
           deviceId,
+          language, // Pass the selected language
         }),
       });
 
@@ -1437,6 +1439,8 @@ export function ChatInterface({ chatId }: ChatInterfaceProps) {
             onRename={activeConversation ? () => handleStartEditingConversation(activeConversation.id, activeConversation.name || 'New Chat') : undefined}
             onDelete={activeConversation ? () => setDeleteConfirm({ type: 'chat', id: activeConversation.id, name: activeConversation.name || 'New Chat' }) : undefined}
             onNewChat={handleNewConversation}
+            language={language}
+            onLanguageChange={setLanguage}
           />
         </div>
 
