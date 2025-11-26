@@ -1,0 +1,28 @@
+{
+  "name": "Didi Sakhi",
+  "short_name": "Didi Sakhi",
+  "description": "imessage-inspired ai-powered website that allows you to chat with documents",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#67FF81",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
+      "sizes": "160x160",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity"],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "New",
+      "description": "Start a new conversation",
+      "url": "/?new=true",
+      "icons": []
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+supabase-schema.sql
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files (NEVER commit these!)
+.env
+.env*.local
+.env.production
+
+# Vercel
+.vercel
+
+# Typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database
+*.db
+*.db-journal
+dev.db
+dev.db-journal
+
+# Uploads
+/public/uploads/images/*
+/public/uploads/generated/*
+/public/uploads/knowledge/*
+!public/uploads/.gitkeep
+
+# Prisma
+/prisma/*.db
+/prisma/*.db-journal
+
+# IDEs
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.mise.toml

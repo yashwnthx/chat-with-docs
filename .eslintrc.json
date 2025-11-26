@@ -1,0 +1,22 @@
+{
+  "extends": [
+    "next/core-web-vitals",
+    "next/typescript"
+  ],
+  "rules": {
+    // Allow `any` type - useful for rapid development
+    "@typescript-eslint/no-explicit-any": "warn",
+    // Allow unused vars with underscore prefix
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_"
+      }
+    ],
+    // Allow unescaped entities in JSX
+    "react/no-unescaped-entities": "warn",
+    // React hooks exhaustive deps - warn instead of error
+    "react-hooks/exhaustive-deps": "warn"
+  }
+}

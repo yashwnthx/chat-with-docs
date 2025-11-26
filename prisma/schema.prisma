@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Chat {
+  id        String            @id @default(cuid())
+  sessionId String
+  title     String            @default("New Chat")
+  isActive  Boolean           @default(true)
+  isPinned  Boolean           @default(false)
+  deviceId  String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  knowledge KnowledgeOnChat[]
+  messages  Message[]
+
+  @@index([sessionId])
+  @@index([updatedAt])
+  @@index([isActive])
+  @@index([isPinned])
+  @@index([deviceId])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  chatId    String
+  role      String
+  content   String
+  modelUsed String?
+  sources   String?
+  imageUrl  String?
+  timestamp DateTime @default(now())
+  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([timestamp])
+}
+
+model Knowledge {
+  id               String            @id @default(cuid())
+  name             String
+  content          String            @default("")
+  originalFilename String            @default("")
+  filePath         String?
+  fileType         String            @default("txt")
+  fileSize         Int               @default(0)
+  documentCount    Int               @default(0)
+  hasImages        Boolean           @default(false)
+  imageCount       Int               @default(0)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  uploadedAt       DateTime          @default(now())
+  chats            KnowledgeOnChat[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model KnowledgeOnChat {
+  chatId      String
+  knowledgeId String
+  chat        Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  knowledge   Knowledge @relation(fields: [knowledgeId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, knowledgeId])
+}
