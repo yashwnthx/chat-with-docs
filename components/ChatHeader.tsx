@@ -60,7 +60,7 @@ export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMob
       </div>
       <div className="flex items-center justify-center flex-1">
         <h1 className="text-sm font-semibold text-foreground truncate max-w-[200px]">
-          {conversationName || 'Chat with Didi'}
+          {conversationName || 'Chat with Sakhi'}
         </h1>
       </div>
       <div className="flex items-center justify-end flex-1 gap-2">
