@@ -9,10 +9,28 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
-      "sizes": "160x160",
+      "src": "/icon.png",
+      "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "categories": ["productivity"],

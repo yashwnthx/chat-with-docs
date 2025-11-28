@@ -54,7 +54,7 @@ export const metadata: Metadata = {
     title: "Didi Sakhi",
     startupImage: [
       {
-        url: "https://em-content.zobj.net/source/apple/419/speech-balloon_1f4ac.png",
+        url: "/icon.png",
         media: "(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)"
       }
     ]
@@ -63,8 +63,17 @@ export const metadata: Metadata = {
     telephone: false,
   },
   icons: {
-    icon: '/icon',
-    apple: '/apple-icon',
+    icon: [
+      { url: '/icon.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon.png', sizes: '512x512', type: 'image/png' },
+    ],
+    shortcut: '/icon.png',
+    apple: '/icon.png',
+    other: {
+      rel: 'apple-touch-icon-precomposed',
+      url: '/icon.png',
+    },
   },
   robots: {
     index: true,

@@ -183,21 +183,36 @@ export async function POST(req: Request) {
     // Always use gemini-2.5-flash for all text and document queries
     const model = 'gemini-2.5-flash';
 
-    // Language instructions for Indian languages
-    const languageInstructions: Record<string, string> = {
-      english: `IMPORTANT: You MUST respond ONLY in English. Do not use Hindi or any other language.`,
-      hindi: `IMPORTANT: You MUST respond ONLY in Hindi (हिंदी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Hindi equivalent.`,
-      bengali: `IMPORTANT: You MUST respond ONLY in Bengali (বাংলা). Use Bengali script throughout your response. Do not mix English words unless they are technical terms that have no Bengali equivalent.`,
-      gujarati: `IMPORTANT: You MUST respond ONLY in Gujarati (ગુજરાતી). Use Gujarati script throughout your response. Do not mix English words unless they are technical terms that have no Gujarati equivalent.`,
-      kannada: `IMPORTANT: You MUST respond ONLY in Kannada (ಕನ್ನಡ). Use Kannada script throughout your response. Do not mix English words unless they are technical terms that have no Kannada equivalent.`,
-      malayalam: `IMPORTANT: You MUST respond ONLY in Malayalam (മലയാളം). Use Malayalam script throughout your response. Do not mix English words unless they are technical terms that have no Malayalam equivalent.`,
-      marathi: `IMPORTANT: You MUST respond ONLY in Marathi (मराठी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Marathi equivalent.`,
-      tamil: `IMPORTANT: You MUST respond ONLY in Tamil (தமிழ்). Use Tamil script throughout your response. Do not mix English words unless they are technical terms that have no Tamil equivalent.`,
-      telugu: `IMPORTANT: You MUST respond ONLY in Telugu (తెలుగు). Use Telugu script throughout your response. Do not mix English words unless they are technical terms that have no Telugu equivalent.`,
-      urdu: `IMPORTANT: You MUST respond ONLY in Urdu (اردو). Use Urdu/Nastaliq script throughout your response. Do not mix English words unless they are technical terms that have no Urdu equivalent.`,
+    // Language instructions for Indian languages - STRICT enforcement
+    const languageNames: Record<string, string> = {
+      english: 'English',
+      hindi: 'Hindi (हिंदी)',
+      bengali: 'Bengali (বাংলা)',
+      gujarati: 'Gujarati (ગુજરાતી)',
+      kannada: 'Kannada (ಕನ್ನಡ)',
+      malayalam: 'Malayalam (മലയാളം)',
+      marathi: 'Marathi (मराठी)',
+      tamil: 'Tamil (தமிழ்)',
+      telugu: 'Telugu (తెలుగు)',
+      urdu: 'Urdu (اردو)',
     };
 
-    const languageInstruction = languageInstructions[language] || languageInstructions.english;
+    const selectedLanguage = languageNames[language] || 'English';
+
+    const languageInstruction = `
+⚠️ CRITICAL LANGUAGE REQUIREMENT ⚠️
+You MUST respond ENTIRELY in ${selectedLanguage}. This is NON-NEGOTIABLE.
+- Every single word of your response must be in ${selectedLanguage}
+- Use the native script for ${selectedLanguage} throughout
+- Do NOT use English words except for: proper nouns, technical terms with no equivalent, or acronyms
+- Do NOT mix languages - the ENTIRE response must be in ${selectedLanguage}
+- Even greetings, transitions, and formatting must be in ${selectedLanguage}
+- If user asks in a different language, still respond ONLY in ${selectedLanguage}
+`;
+
+    const languageReminder = `
+
+REMINDER: Your response MUST be 100% in ${selectedLanguage}. Do not use any other language.`;
 
     // Get knowledge base context - load system-trained documents
     let systemPrompt = `You are Didi Sakhi, a helpful AI assistant specialized in village development, Panchayati Raj, and rural governance in India.
@@ -210,7 +225,8 @@ Format your responses clearly:
 - Use numbered lists for steps or multiple points
 - Use **bold** for important terms
 - Use bullet points for related items
-- Keep paragraphs short and readable`;
+- Keep paragraphs short and readable
+${languageReminder}`;
 
     let knowledgeSourceNames: string[] = [];
 
@@ -253,6 +269,7 @@ IMPORTANT INSTRUCTIONS:
    - Look for [PAGE X] markers in the document content to find page numbers
    - Do NOT mention sources anywhere else in your response
 4. If the question is not covered in the documents, politely say so and do not include a SOURCE tag
+${languageReminder}
 
 Be helpful and accurate.`;
     }
