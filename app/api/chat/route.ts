@@ -183,10 +183,21 @@ export async function POST(req: Request) {
     // Always use gemini-2.5-flash for all text and document queries
     const model = 'gemini-2.5-flash';
 
-    // Language instructions
-    const languageInstruction = language === 'hindi'
-      ? `IMPORTANT: You MUST respond ONLY in Hindi (हिंदी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Hindi equivalent.`
-      : `IMPORTANT: You MUST respond ONLY in English. Do not use Hindi or any other language.`;
+    // Language instructions for Indian languages
+    const languageInstructions: Record<string, string> = {
+      english: `IMPORTANT: You MUST respond ONLY in English. Do not use Hindi or any other language.`,
+      hindi: `IMPORTANT: You MUST respond ONLY in Hindi (हिंदी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Hindi equivalent.`,
+      bengali: `IMPORTANT: You MUST respond ONLY in Bengali (বাংলা). Use Bengali script throughout your response. Do not mix English words unless they are technical terms that have no Bengali equivalent.`,
+      gujarati: `IMPORTANT: You MUST respond ONLY in Gujarati (ગુજરાતી). Use Gujarati script throughout your response. Do not mix English words unless they are technical terms that have no Gujarati equivalent.`,
+      kannada: `IMPORTANT: You MUST respond ONLY in Kannada (ಕನ್ನಡ). Use Kannada script throughout your response. Do not mix English words unless they are technical terms that have no Kannada equivalent.`,
+      malayalam: `IMPORTANT: You MUST respond ONLY in Malayalam (മലയാളം). Use Malayalam script throughout your response. Do not mix English words unless they are technical terms that have no Malayalam equivalent.`,
+      marathi: `IMPORTANT: You MUST respond ONLY in Marathi (मराठी). Use Devanagari script throughout your response. Do not mix English words unless they are technical terms that have no Marathi equivalent.`,
+      tamil: `IMPORTANT: You MUST respond ONLY in Tamil (தமிழ்). Use Tamil script throughout your response. Do not mix English words unless they are technical terms that have no Tamil equivalent.`,
+      telugu: `IMPORTANT: You MUST respond ONLY in Telugu (తెలుగు). Use Telugu script throughout your response. Do not mix English words unless they are technical terms that have no Telugu equivalent.`,
+      urdu: `IMPORTANT: You MUST respond ONLY in Urdu (اردو). Use Urdu/Nastaliq script throughout your response. Do not mix English words unless they are technical terms that have no Urdu equivalent.`,
+    };
+
+    const languageInstruction = languageInstructions[language] || languageInstructions.english;
 
     // Get knowledge base context - load system-trained documents
     let systemPrompt = `You are Didi Sakhi, a helpful AI assistant specialized in village development, Panchayati Raj, and rural governance in India.

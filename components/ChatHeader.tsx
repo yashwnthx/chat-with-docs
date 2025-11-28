@@ -2,7 +2,21 @@
 
 import { memo, useState, useRef, useEffect } from 'react';
 
-export type Language = 'english' | 'hindi';
+// Indian languages supported by Gemini
+export type Language = 'english' | 'hindi' | 'bengali' | 'gujarati' | 'kannada' | 'malayalam' | 'marathi' | 'tamil' | 'telugu' | 'urdu';
+
+export const LANGUAGES: { code: Language; name: string; nativeName: string; shortCode: string }[] = [
+  { code: 'english', name: 'English', nativeName: 'English', shortCode: 'EN' },
+  { code: 'hindi', name: 'Hindi', nativeName: 'हिंदी', shortCode: 'हि' },
+  { code: 'bengali', name: 'Bengali', nativeName: 'বাংলা', shortCode: 'বা' },
+  { code: 'gujarati', name: 'Gujarati', nativeName: 'ગુજરાતી', shortCode: 'ગુ' },
+  { code: 'kannada', name: 'Kannada', nativeName: 'ಕನ್ನಡ', shortCode: 'ಕ' },
+  { code: 'malayalam', name: 'Malayalam', nativeName: 'മലയാളം', shortCode: 'മ' },
+  { code: 'marathi', name: 'Marathi', nativeName: 'मराठी', shortCode: 'म' },
+  { code: 'tamil', name: 'Tamil', nativeName: 'தமிழ்', shortCode: 'த' },
+  { code: 'telugu', name: 'Telugu', nativeName: 'తెలుగు', shortCode: 'తె' },
+  { code: 'urdu', name: 'Urdu', nativeName: 'اردو', shortCode: 'ا' },
+];
 
 interface ChatHeaderProps {
   conversationName?: string;
@@ -81,7 +95,7 @@ export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMob
                 <line x1="2" y1="12" x2="22" y2="12"></line>
                 <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
               </svg>
-              <span className="hidden sm:inline">{language === 'hindi' ? 'हिंदी' : 'EN'}</span>
+              <span className="hidden sm:inline">{LANGUAGES.find(l => l.code === language)?.shortCode || 'EN'}</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
                 <path d="M6 9l6 6 6-6"></path>
               </svg>
@@ -89,39 +103,26 @@ export const ChatHeader = memo(function ChatHeader({ conversationName, onShowMob
 
             {/* Language dropdown */}
             {showLangMenu && (
-              <div className="absolute right-0 top-full mt-1.5 w-36 bg-popover border border-border rounded-lg shadow-lg py-1 z-[110]">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLanguageChange('english');
-                    setShowLangMenu(false);
-                  }}
-                  className={`w-full px-3 py-2 text-sm text-left hover:bg-muted/60 active:bg-muted flex items-center gap-2 transition-colors duration-150 ${language === 'english' ? 'bg-muted/40' : ''}`}
-                >
-                  <span className="w-5 text-center font-medium">EN</span>
-                  <span>English</span>
-                  {language === 'english' && (
-                    <svg className="ml-auto h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLanguageChange('hindi');
-                    setShowLangMenu(false);
-                  }}
-                  className={`w-full px-3 py-2 text-sm text-left hover:bg-muted/60 active:bg-muted flex items-center gap-2 transition-colors duration-150 ${language === 'hindi' ? 'bg-muted/40' : ''}`}
-                >
-                  <span className="w-5 text-center font-medium">हि</span>
-                  <span>हिंदी</span>
-                  {language === 'hindi' && (
-                    <svg className="ml-auto h-4 w-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </button>
+              <div className="absolute right-0 top-full mt-1.5 w-44 bg-popover border border-border rounded-xl shadow-lg py-1 z-[110] max-h-80 overflow-y-auto">
+                {LANGUAGES.map((lang) => (
+                  <button
+                    key={lang.code}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onLanguageChange(lang.code);
+                      setShowLangMenu(false);
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left hover:bg-muted/60 active:bg-muted flex items-center gap-2 transition-colors duration-150 ${language === lang.code ? 'bg-muted/40' : ''}`}
+                  >
+                    <span className="w-6 text-center font-medium text-muted-foreground">{lang.shortCode}</span>
+                    <span className="flex-1">{lang.nativeName}</span>
+                    {language === lang.code && (
+                      <svg className="h-4 w-4 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
           </div>
