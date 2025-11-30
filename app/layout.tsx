@@ -10,32 +10,25 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-// Normalize metadata base URL to avoid invalid URL errors when NEXT_PUBLIC_APP_URL
-// is provided without a scheme (e.g. "didisakhi.diu.one"). Ensure we always
-// pass a fully-qualified URL to the Metadata API.
-const _rawBase = process.env.NEXT_PUBLIC_APP_URL;
-let _metadataBase = 'https://didisakhi.diu.one';
-if (_rawBase) {
-  // If a scheme is missing, assume https
-  _metadataBase = _rawBase.startsWith('http') ? _rawBase : `https://${_rawBase}`;
-}
+// Site URL - hardcoded for consistency
+const SITE_URL = 'https://didisakhi.diu.one';
 
 export const metadata: Metadata = {
   title: "Didi Sakhi",
   description: "imessage-inspired ai-powered website that allows you to chat with documents",
   manifest: "/manifest.json",
   publisher: "diu.one",
-  metadataBase: new URL(_metadataBase),
+  metadataBase: new URL(SITE_URL),
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "/",
+    url: SITE_URL,
     title: "Didi Sakhi",
     description: "imessage-inspired ai-powered website that allows you to chat with documents",
     siteName: "Didi Sakhi",
     images: [
       {
-        url: "/og.png",
+        url: `${SITE_URL}/og.png`,
         width: 1200,
         height: 630,
         alt: "Didi Sakhi - AI-powered chat for village development"
@@ -46,14 +39,8 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Didi Sakhi",
     description: "imessage-inspired ai-powered website that allows you to chat with documents",
-    images: ["/og.png"],
+    images: [`${SITE_URL}/og.png`],
     creator: "@diu_one",
-  },
-  other: {
-    "slack-app-id": "",
-    "og:image": "/og.png",
-    "og:image:width": "1200",
-    "og:image:height": "630",
   },
   appleWebApp: {
     capable: true,
