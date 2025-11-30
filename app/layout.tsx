@@ -35,10 +35,10 @@ export const metadata: Metadata = {
     siteName: "Didi Sakhi",
     images: [
       {
-        url: "/opengraph-image",
+        url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Didi Sakhi"
+        alt: "Didi Sakhi - AI-powered chat for village development"
       }
     ]
   },
@@ -46,7 +46,14 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Didi Sakhi",
     description: "imessage-inspired ai-powered website that allows you to chat with documents",
-    images: ["/twitter-image"],
+    images: ["/og.png"],
+    creator: "@diu_one",
+  },
+  other: {
+    "slack-app-id": "",
+    "og:image": "/og.png",
+    "og:image:width": "1200",
+    "og:image:height": "630",
   },
   appleWebApp: {
     capable: true,
